@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "WebFetch(domain:blackboard.sh)",
+      "Bash(bun add:*)",
+      "Bash(npx vite:*)",
+      "Bash(bun build:*)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}
