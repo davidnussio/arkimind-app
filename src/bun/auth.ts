@@ -5,11 +5,12 @@
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
-import { authenticate } from "@google-cloud/local-auth";
+import http from "node:http";
+import { OAuth2Client } from "google-auth-library";
 import { google } from "googleapis";
 import * as db from "./db";
 
-export type OAuth2Client = InstanceType<typeof google.auth.OAuth2>;
+export type { OAuth2Client };
 
 const SCOPES = ["https://www.googleapis.com/auth/drive"];
 
@@ -30,7 +31,7 @@ export function loadSavedClient(): OAuth2Client | null {
   const auth = db.loadAuth();
   if (!auth) return null;
 
-  const client = new google.auth.OAuth2(auth.client_id, auth.client_secret);
+  const client = new OAuth2Client(auth.client_id, auth.client_secret);
   client.setCredentials({ refresh_token: auth.refresh_token });
   return client;
 }
@@ -55,25 +56,69 @@ export async function login(): Promise<{ success: boolean; error?: string }> {
     // Delete existing auth
     db.deleteAuth();
 
-    // Run browser auth flow
-    const client = await authenticate({
-      scopes: SCOPES,
-      keyfilePath: credentialsPath,
-    });
-
-    if (!client.credentials?.refresh_token) {
-      return { success: false, error: "No refresh token received" };
-    }
-
     // Read client secrets from credentials.json
     const raw = fs.readFileSync(credentialsPath, "utf-8");
     const keys = JSON.parse(raw) as {
-      installed?: { client_id: string; client_secret: string };
-      web?: { client_id: string; client_secret: string };
+      installed?: {
+        client_id: string;
+        client_secret: string;
+        redirect_uris?: string[];
+      };
+      web?: {
+        client_id: string;
+        client_secret: string;
+        redirect_uris?: string[];
+      };
     };
     const key = keys.installed ?? keys.web;
     if (!key) {
       return { success: false, error: "Invalid credentials.json format" };
+    }
+
+    // Start local server to receive the OAuth callback
+    const redirectUri = "http://localhost:3000/oauth2callback";
+    const oauth2Client = new OAuth2Client(
+      key.client_id,
+      key.client_secret,
+      redirectUri,
+    );
+
+    const authorizeUrl = oauth2Client.generateAuthUrl({
+      access_type: "offline",
+      scope: SCOPES,
+      prompt: "consent",
+    });
+
+    // Wait for the authorization code via local HTTP server
+    const code = await new Promise<string>((resolve, reject) => {
+      const server = http.createServer((req, res) => {
+        const url = new URL(req.url!, `http://localhost:3000`);
+        const authCode = url.searchParams.get("code");
+        const error = url.searchParams.get("error");
+
+        if (error) {
+          res.end("Authentication denied.");
+          server.close();
+          reject(new Error(`OAuth error: ${error}`));
+          return;
+        }
+
+        if (authCode) {
+          res.end("Authentication successful! You can close this tab.");
+          server.close();
+          resolve(authCode);
+        }
+      });
+      server.listen(3000, () => {
+        // Open the browser for consent
+        import("open").then((mod) => mod.default(authorizeUrl));
+      });
+    });
+
+    const { tokens } = await oauth2Client.getToken(code);
+
+    if (!tokens.refresh_token) {
+      return { success: false, error: "No refresh token received" };
     }
 
     // Save to database
@@ -81,7 +126,7 @@ export async function login(): Promise<{ success: boolean; error?: string }> {
       type: "authorized_user",
       client_id: key.client_id,
       client_secret: key.client_secret,
-      refresh_token: client.credentials.refresh_token,
+      refresh_token: tokens.refresh_token,
     });
 
     return { success: true };

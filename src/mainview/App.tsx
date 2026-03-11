@@ -42,7 +42,7 @@ function App() {
         <div className="flex items-center gap-2 px-4 py-4">
           <Archive className="size-5 text-sidebar-primary" />
           <span className="text-sm font-semibold text-sidebar-foreground">
-            Arkimind v1.0
+            Arkimind v1.1
           </span>
         </div>
 
