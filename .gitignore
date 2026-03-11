@@ -1,3 +1,24 @@
 node_modules
 build
 dist
+
+# macOS metadata files (can leak local directory structure)
+.DS_Store
+**/.DS_Store
+
+# AI developer tool configuration (local, not for sharing)
+.claude/
+
+# Google OAuth credentials — must NEVER be committed
+# Canonical location: ~/.arkimind/credentials.json
+# This entry prevents accidental commits if the file is placed in the repo root
+credentials.json
+
+# Local databases (contain OAuth tokens and sensitive user data)
+*.sqlite
+*.db
+
+# Environment variable files (may contain secrets)
+.env
+.env.local
+.env.*.local
