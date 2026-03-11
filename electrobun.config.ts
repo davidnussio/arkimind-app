@@ -18,14 +18,15 @@ export default {
       bundleCEF: false,
     },
     linux: {
-      bundleCEF: false,
+      bundleCEF: true,
     },
     win: {
-      bundleCEF: false,
+      bundleCEF: true,
     },
   },
   release: {
-    baseUrl: "http://localhost:5555",
+    baseUrl:
+      "https://github.com/davidnussio/arkimind-app/releases/latest/download",
     generatePatch: true,
   },
 } satisfies ElectrobunConfig;
