@@ -7,22 +7,50 @@ import os from "node:os";
 import fs from "node:fs";
 import http from "node:http";
 import { OAuth2Client } from "google-auth-library";
-import { google } from "googleapis";
 import * as db from "./db";
 
-export type { OAuth2Client };
+export type { OAuth2Client } from "google-auth-library";
 
 const SCOPES = ["https://www.googleapis.com/auth/drive"];
 
+const ENV_CREDENTIAL_PATHS = [
+  "ARKIMIND_CREDENTIALS_PATH",
+  "GOOGLE_OAUTH_CREDENTIALS_PATH",
+] as const;
+
 // Look for credentials.json in these locations (in order)
 function findCredentialsPath(): string | null {
+  // Allow explicit path override for managed deployments.
+  for (const envName of ENV_CREDENTIAL_PATHS) {
+    const envPath = process.env[envName]?.trim();
+    if (!envPath) continue;
+
+    const resolved = path.resolve(envPath);
+    if (fs.existsSync(resolved)) {
+      return resolved;
+    }
+
+    console.warn(`[auth] Ignoring ${envName}: file not found at ${resolved}`);
+  }
+
   const candidates = [
     path.join(os.homedir(), ".arkimind", "credentials.json"),
     path.join(process.cwd(), "credentials.json"),
   ];
+
   for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
+    if (!fs.existsSync(p)) continue;
+
+    // Keep root fallback for backward compatibility, but make it visible.
+    if (p === candidates[1]) {
+      console.warn(
+        "[auth] Using ./credentials.json fallback. Prefer ~/.arkimind/credentials.json",
+      );
+    }
+
+    return p;
   }
+
   return null;
 }
 
@@ -92,7 +120,7 @@ export async function login(): Promise<{ success: boolean; error?: string }> {
     // Wait for the authorization code via local HTTP server
     const code = await new Promise<string>((resolve, reject) => {
       const server = http.createServer((req, res) => {
-        const url = new URL(req.url!, `http://localhost:3000`);
+        const url = new URL(req.url ?? "/", `http://localhost:3000`);
         const authCode = url.searchParams.get("code");
         const error = url.searchParams.get("error");
 

@@ -137,6 +137,12 @@ export const api = {
   searchDocuments: (query: string) =>
     request<any[]>(`/api/documents/search?q=${encodeURIComponent(query)}`),
 
+  deleteDocument: (driveFileId: string, deleteDrive: boolean) =>
+    request<{ success: boolean }>(
+      `/api/documents/${driveFileId}?deleteDrive=${deleteDrive}`,
+      { method: "DELETE" },
+    ),
+
   // --- External ---
   openExternal: (url: string) =>
     request<{ success: boolean }>("/api/open-external", {

@@ -486,8 +486,40 @@ export function Dashboard() {
                                 <Archive className="size-3.5 text-green-600" />
                               )}
                             </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              onClick={() =>
+                                handleClassify(file, folder.driveFolderId)
+                              }
+                              disabled={classifyingFiles.has(file.id)}
+                              title="Ri-analizza"
+                            >
+                              {classifyingFiles.has(file.id) ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                <RefreshCw className="size-3.5" />
+                              )}
+                            </Button>
                           </>
-                        ) : file.classificationStatus !== "archived" ? (
+                        ) : file.classificationStatus === "archived" ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              handleClassify(file, folder.driveFolderId)
+                            }
+                            disabled={classifyingFiles.has(file.id)}
+                            title="Ri-analizza"
+                          >
+                            {classifyingFiles.has(file.id) ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                              <RefreshCw className="size-3.5" />
+                            )}
+                            <span className="text-xs">Ri-analizza</span>
+                          </Button>
+                        ) : (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -503,7 +535,7 @@ export function Dashboard() {
                             )}
                             <span className="text-xs">Analizza</span>
                           </Button>
-                        ) : null}
+                        )}
                       </div>
                     </li>
                   ))}

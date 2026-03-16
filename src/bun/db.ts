@@ -280,3 +280,20 @@ export function getDocumentByFileId(driveFileId: string): any | null {
     .prepare("SELECT * FROM documents WHERE drive_file_id = ?")
     .get(driveFileId);
 }
+
+export function deleteDocument(driveFileId: string): boolean {
+  return getDb()
+    .prepare("DELETE FROM documents WHERE drive_file_id = ?")
+    .run(driveFileId).changes > 0;
+}
+
+export function resetDocumentArchiveStatus(driveFileId: string) {
+  getDb()
+    .prepare(
+      `UPDATE documents
+       SET archived_path = NULL, archived_filename = NULL,
+           status = 'classified', updated_at = CURRENT_TIMESTAMP
+       WHERE drive_file_id = ?`,
+    )
+    .run(driveFileId);
+}

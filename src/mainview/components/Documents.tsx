@@ -18,6 +18,8 @@ import {
   Banknote,
   Eye,
   ExternalLink,
+  Trash2,
+  RefreshCw,
 } from "lucide-react";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -53,6 +55,9 @@ export function Documents() {
   } | null>(null);
   const [previewData, setPreviewData] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [reanalyzingFiles, setReanalyzingFiles] = useState<Set<string>>(new Set());
 
   const loadDocuments = useCallback(async () => {
     setLoading(true);
@@ -111,6 +116,37 @@ export function Documents() {
 
   const handleOpenInDrive = (driveFileId: string) => {
     api.openExternal(`https://drive.google.com/file/d/${driveFileId}/view`);
+  };
+
+  const handleDelete = async (driveFileId: string, deleteDrive: boolean) => {
+    setDeleting(true);
+    try {
+      await api.deleteDocument(driveFileId, deleteDrive);
+      setDocuments((prev) => prev.filter((d) => d.drive_file_id !== driveFileId));
+      setDeleteTarget(null);
+    } catch (e) {
+      console.error("Delete failed:", e);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleReanalyze = async (doc: any) => {
+    setReanalyzingFiles((prev) => new Set(prev).add(doc.drive_file_id));
+    try {
+      const result = await api.classifyFile(doc.drive_file_id);
+      if (result.success) {
+        loadDocuments();
+      }
+    } catch (e) {
+      console.error("Re-analyze failed:", e);
+    } finally {
+      setReanalyzingFiles((prev) => {
+        const next = new Set(prev);
+        next.delete(doc.drive_file_id);
+        return next;
+      });
+    }
   };
 
   return (
@@ -241,6 +277,27 @@ export function Documents() {
                         <Sparkles className="size-3.5 text-blue-500" />
                       </Button>
                     )}
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => handleReanalyze(doc)}
+                      disabled={reanalyzingFiles.has(doc.drive_file_id)}
+                      title="Ri-analizza"
+                    >
+                      {reanalyzingFiles.has(doc.drive_file_id) ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <RefreshCw className="size-3.5" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => setDeleteTarget(doc)}
+                      title="Elimina"
+                    >
+                      <Trash2 className="size-3.5 text-red-500" />
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -302,12 +359,95 @@ export function Documents() {
       )}
 
       {/* Document Detail Dialog */}
-      {selectedDoc && <DocumentDetailDialog doc={selectedDoc} onClose={() => setSelectedDoc(null)} />}
+      {selectedDoc && (
+        <DocumentDetailDialog
+          doc={selectedDoc}
+          onClose={() => setSelectedDoc(null)}
+          onDelete={(doc: any) => {
+            setSelectedDoc(null);
+            setDeleteTarget(doc);
+          }}
+          onReanalyze={(doc: any) => {
+            setSelectedDoc(null);
+            handleReanalyze(doc);
+          }}
+        />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => !deleting && setDeleteTarget(null)}>
+          <div
+            className="mx-4 w-full max-w-md rounded-xl bg-background shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-border px-4 py-3">
+              <h3 className="text-sm font-medium">Elimina documento</h3>
+              <p className="mt-1 truncate text-xs text-muted-foreground">{deleteTarget.original_name}</p>
+            </div>
+            <div className="space-y-2 p-4">
+              <p className="text-sm text-muted-foreground">
+                Come vuoi procedere con l&apos;eliminazione?
+              </p>
+              <div className="space-y-2 pt-2">
+                <button
+                  onClick={() => handleDelete(deleteTarget.drive_file_id, false)}
+                  disabled={deleting}
+                  className="flex w-full items-center gap-3 rounded-lg border border-border p-3 text-left text-sm hover:bg-muted/50 transition-colors disabled:opacity-50"
+                >
+                  <Trash2 className="size-4 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium">Elimina solo dal database locale</p>
+                    <p className="text-xs text-muted-foreground">Il file resta su Google Drive</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => handleDelete(deleteTarget.drive_file_id, true)}
+                  disabled={deleting}
+                  className="flex w-full items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-left text-sm hover:bg-red-100 transition-colors dark:border-red-900/50 dark:bg-red-900/20 dark:hover:bg-red-900/30 disabled:opacity-50"
+                >
+                  <Trash2 className="size-4 text-red-500" />
+                  <div>
+                    <p className="font-medium text-red-700 dark:text-red-400">Elimina anche da Google Drive</p>
+                    <p className="text-xs text-red-600/70 dark:text-red-400/70">Eliminazione permanente</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+            <div className="border-t border-border px-4 py-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                className="w-full rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                {deleting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="size-3.5 animate-spin" />
+                    Eliminazione in corso...
+                  </span>
+                ) : (
+                  "Annulla"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function DocumentDetailDialog({ doc, onClose }: { doc: any; onClose: () => void }) {
+function DocumentDetailDialog({
+  doc,
+  onClose,
+  onDelete,
+  onReanalyze,
+}: {
+  doc: any;
+  onClose: () => void;
+  onDelete: (doc: any) => void;
+  onReanalyze: (doc: any) => void;
+}) {
   const classification = doc.classification_json
     ? (() => { try { return JSON.parse(doc.classification_json); } catch { return null; } })()
     : null;
@@ -516,10 +656,24 @@ function DocumentDetailDialog({ doc, onClose }: { doc: any; onClose: () => void 
         </div>
 
         {/* Footer */}
-        <div className="border-t border-border px-4 py-3">
+        <div className="flex items-center gap-2 border-t border-border px-4 py-3">
+          <button
+            onClick={() => onReanalyze(doc)}
+            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
+          >
+            <RefreshCw className="size-3.5" />
+            Ri-analizza
+          </button>
+          <button
+            onClick={() => onDelete(doc)}
+            className="flex items-center gap-1.5 rounded-md border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 transition-colors dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20"
+          >
+            <Trash2 className="size-3.5" />
+            Elimina
+          </button>
           <button
             onClick={onClose}
-            className="w-full rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
+            className="ml-auto rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
           >
             Chiudi
           </button>

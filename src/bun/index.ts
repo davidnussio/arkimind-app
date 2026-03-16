@@ -284,6 +284,9 @@ Bun.serve({
           inboxFolderId: fileMeta.parents?.[0],
         });
 
+        // Reset archive fields when re-classifying
+        db.resetDocumentArchiveStatus(fileId);
+
         return json({ success: true, classification });
       }
 
@@ -328,6 +331,28 @@ Bun.serve({
           body.targetFilename,
         );
 
+        return json({ success: true });
+      }
+
+      // --- Delete document ---
+      if (
+        pathname.startsWith("/api/documents/") &&
+        pathname !== "/api/documents/search" &&
+        method === "DELETE"
+      ) {
+        const driveFileId = pathname.replace("/api/documents/", "");
+        const deleteDrive = url.searchParams.get("deleteDrive") === "true";
+
+        if (deleteDrive) {
+          try {
+            await drive.deleteFile(driveFileId);
+          } catch (e) {
+            console.error("Drive delete failed:", e);
+            return errorResponse(`Errore eliminazione da Drive: ${e}`, 502);
+          }
+        }
+
+        db.deleteDocument(driveFileId);
         return json({ success: true });
       }
 

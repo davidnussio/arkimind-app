@@ -219,6 +219,12 @@ export async function uploadFile(
   };
 }
 
+/** Permanently delete a file from Google Drive. */
+export async function deleteFile(fileId: string): Promise<void> {
+  const drive = getDriveClient();
+  await drive.files.delete({ fileId });
+}
+
 /** Get a file's thumbnail or content as a base64 data URL. */
 export async function getFilePreview(
   fileId: string,
