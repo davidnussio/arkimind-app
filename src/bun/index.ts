@@ -1,4 +1,5 @@
 import { ApplicationMenu, BrowserWindow, Updater, Utils } from "electrobun/bun";
+import * as path from "node:path";
 import * as db from "./db";
 import * as auth from "./auth";
 import * as drive from "./drive";
@@ -61,6 +62,7 @@ function errorResponse(message: string, status = 500): Response {
 
 Bun.serve({
   port: API_PORT,
+  idleTimeout: 120,
   async fetch(req) {
     const url = new URL(req.url);
     const method = req.method;
@@ -298,6 +300,18 @@ Bun.serve({
           targetFilename: string;
         };
 
+        const normalizedPathSegments = body.targetPath
+          .split("/")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+        const normalizedTargetPath = normalizedPathSegments.join("/");
+        const normalizedTargetFilename = body.targetFilename.trim();
+
+        if (!normalizedTargetPath)
+          return errorResponse("targetPath is required", 400);
+        if (!normalizedTargetFilename)
+          return errorResponse("targetFilename is required", 400);
+
         const archiveRootId = db.getSetting("archive_root_folder_id");
         if (!archiveRootId)
           return errorResponse("Archive root folder not configured", 400);
@@ -309,26 +323,30 @@ Bun.serve({
           return errorResponse("Cannot determine file parent", 400);
 
         // Create folder path and move file
-        const pathSegments = body.targetPath
-          .split("/")
-          .filter((s) => s.length > 0);
         const targetFolder = await drive.getOrCreateFolderPath(
           archiveRootId,
-          pathSegments,
+          normalizedPathSegments,
         );
+        const targetExt = path.extname(normalizedTargetFilename);
+        const sourceExt = path.extname(fileMeta.name);
+        const archivedFilename =
+          targetExt || !sourceExt
+            ? normalizedTargetFilename
+            : normalizedTargetFilename + sourceExt;
         await drive.moveFile(
           fileId,
           currentParentId,
           targetFolder.id,
-          body.targetFilename,
+          archivedFilename,
         );
 
         // Update document status
         db.updateDocumentStatus(
           fileId,
           "archived",
-          body.targetPath,
-          body.targetFilename,
+          normalizedTargetPath,
+          archivedFilename,
+          archivedFilename,
         );
 
         return json({ success: true });

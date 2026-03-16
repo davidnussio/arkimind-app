@@ -76,26 +76,60 @@ function initSchema(db: Database) {
     )
   `);
 
-  db.exec("CREATE INDEX IF NOT EXISTS idx_docs_category ON documents(category)");
-  db.exec("CREATE INDEX IF NOT EXISTS idx_docs_date ON documents(document_date)");
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS idx_docs_category ON documents(category)",
+  );
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS idx_docs_date ON documents(document_date)",
+  );
 
   // Migrate: add columns that may be missing from older schema
   const columnsToAdd = [
-    { name: "status", sql: "ALTER TABLE documents ADD COLUMN status TEXT DEFAULT 'pending'" },
-    { name: "classification_json", sql: "ALTER TABLE documents ADD COLUMN classification_json TEXT" },
+    {
+      name: "status",
+      sql: "ALTER TABLE documents ADD COLUMN status TEXT DEFAULT 'pending'",
+    },
+    {
+      name: "classification_json",
+      sql: "ALTER TABLE documents ADD COLUMN classification_json TEXT",
+    },
     { name: "entity", sql: "ALTER TABLE documents ADD COLUMN entity TEXT" },
-    { name: "document_type", sql: "ALTER TABLE documents ADD COLUMN document_type TEXT" },
-    { name: "document_date", sql: "ALTER TABLE documents ADD COLUMN document_date TEXT" },
-    { name: "is_tax_relevant", sql: "ALTER TABLE documents ADD COLUMN is_tax_relevant INTEGER DEFAULT 0" },
-    { name: "archived_path", sql: "ALTER TABLE documents ADD COLUMN archived_path TEXT" },
-    { name: "archived_filename", sql: "ALTER TABLE documents ADD COLUMN archived_filename TEXT" },
-    { name: "inbox_folder_id", sql: "ALTER TABLE documents ADD COLUMN inbox_folder_id TEXT" },
-    { name: "updated_at", sql: "ALTER TABLE documents ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP" },
+    {
+      name: "document_type",
+      sql: "ALTER TABLE documents ADD COLUMN document_type TEXT",
+    },
+    {
+      name: "document_date",
+      sql: "ALTER TABLE documents ADD COLUMN document_date TEXT",
+    },
+    {
+      name: "is_tax_relevant",
+      sql: "ALTER TABLE documents ADD COLUMN is_tax_relevant INTEGER DEFAULT 0",
+    },
+    {
+      name: "archived_path",
+      sql: "ALTER TABLE documents ADD COLUMN archived_path TEXT",
+    },
+    {
+      name: "archived_filename",
+      sql: "ALTER TABLE documents ADD COLUMN archived_filename TEXT",
+    },
+    {
+      name: "inbox_folder_id",
+      sql: "ALTER TABLE documents ADD COLUMN inbox_folder_id TEXT",
+    },
+    {
+      name: "updated_at",
+      sql: "ALTER TABLE documents ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+    },
   ];
 
   const existingColumns = new Set(
-    (db.prepare("PRAGMA table_info(documents)").all() as Array<{ name: string }>)
-      .map((r) => r.name),
+    (
+      db.prepare("PRAGMA table_info(documents)").all() as Array<{
+        name: string;
+      }>
+    ).map((r) => r.name),
   );
 
   for (const col of columnsToAdd) {
@@ -129,7 +163,9 @@ export function loadAuth(): {
   refresh_token: string;
 } | null {
   return getDb()
-    .prepare("SELECT type, client_id, client_secret, refresh_token FROM auth WHERE id = 1")
+    .prepare(
+      "SELECT type, client_id, client_secret, refresh_token FROM auth WHERE id = 1",
+    )
     .get() as any;
 }
 
@@ -158,7 +194,9 @@ export function deleteSetting(key: string) {
 }
 
 export function getAllSettings(): Record<string, string> {
-  const rows = getDb().prepare("SELECT key, value FROM settings").all() as Array<{
+  const rows = getDb()
+    .prepare("SELECT key, value FROM settings")
+    .all() as Array<{
     key: string;
     value: string;
   }>;
@@ -174,13 +212,17 @@ export function getInboxFolders(): Array<{
   name: string;
 }> {
   return getDb()
-    .prepare("SELECT id, drive_folder_id, name FROM inbox_folders ORDER BY name")
+    .prepare(
+      "SELECT id, drive_folder_id, name FROM inbox_folders ORDER BY name",
+    )
     .all() as any[];
 }
 
 export function addInboxFolder(driveFolderId: string, name: string) {
   getDb()
-    .prepare("INSERT OR IGNORE INTO inbox_folders (drive_folder_id, name) VALUES (?, ?)")
+    .prepare(
+      "INSERT OR IGNORE INTO inbox_folders (drive_folder_id, name) VALUES (?, ?)",
+    )
     .run(driveFolderId, name);
 }
 
@@ -245,16 +287,24 @@ export function updateDocumentStatus(
   status: string,
   archivedPath?: string,
   archivedFilename?: string,
+  originalName?: string,
 ) {
   getDb()
     .prepare(
       `UPDATE documents
        SET status = ?, archived_path = COALESCE(?, archived_path),
            archived_filename = COALESCE(?, archived_filename),
+           original_name = COALESCE(?, original_name),
            updated_at = CURRENT_TIMESTAMP
        WHERE drive_file_id = ?`,
     )
-    .run(status, archivedPath ?? null, archivedFilename ?? null, driveFileId);
+    .run(
+      status,
+      archivedPath ?? null,
+      archivedFilename ?? null,
+      originalName ?? null,
+      driveFileId,
+    );
 }
 
 export function getDocuments(limit = 100): any[] {
@@ -282,9 +332,11 @@ export function getDocumentByFileId(driveFileId: string): any | null {
 }
 
 export function deleteDocument(driveFileId: string): boolean {
-  return getDb()
-    .prepare("DELETE FROM documents WHERE drive_file_id = ?")
-    .run(driveFileId).changes > 0;
+  return (
+    getDb()
+      .prepare("DELETE FROM documents WHERE drive_file_id = ?")
+      .run(driveFileId).changes > 0
+  );
 }
 
 export function resetDocumentArchiveStatus(driveFileId: string) {

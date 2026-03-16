@@ -13,6 +13,8 @@ import { api } from "@/lib/api";
 
 type Tab = "dashboard" | "documents" | "settings";
 
+const APP_VERSION = __APP_VERSION__;
+
 const NAV_ITEMS: Array<{
   id: Tab;
   label: string;
@@ -41,8 +43,11 @@ function App() {
         {/* Logo */}
         <div className="flex items-center gap-2 px-4 py-4">
           <Archive className="size-5 text-sidebar-primary" />
-          <span className="text-sm font-semibold text-sidebar-foreground">
-            Arkimind v1.1
+          <span className="flex items-baseline gap-1.5 text-sm font-semibold text-sidebar-foreground">
+            <span>Arkimind</span>
+            <span className="text-[10px] font-normal text-sidebar-foreground/40">
+              v{APP_VERSION}
+            </span>
           </span>
         </div>
 

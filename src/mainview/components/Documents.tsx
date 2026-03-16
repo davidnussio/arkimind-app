@@ -23,16 +23,23 @@ import {
 } from "lucide-react";
 
 const CATEGORY_COLORS: Record<string, string> = {
-  Assicurazione: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  Banca: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-  Fatture: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+  Assicurazione:
+    "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+  Banca:
+    "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+  Fatture:
+    "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
   Imposte: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
   Salute: "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400",
-  Lavoro: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
-  Abitazione: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+  Lavoro:
+    "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
+  Abitazione:
+    "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
   Veicolo: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400",
-  Amministrativo: "bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-400",
-  Educazione: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
+  Amministrativo:
+    "bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-400",
+  Educazione:
+    "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
   Altro: "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400",
 };
 
@@ -42,11 +49,30 @@ const STATUS_LABELS: Record<string, { label: string; icon: typeof Archive }> = {
   archived: { label: "Archiviato", icon: Archive },
 };
 
+function getDisplayedFilename(doc: any): string {
+  const archivedName = doc.archived_filename?.trim();
+  if (archivedName) return archivedName;
+  return doc.original_name;
+}
+
+function formatArchivedLocation(
+  archivedPath?: string | null,
+  archivedFilename?: string | null,
+): string {
+  const normalizedPath = (archivedPath ?? "").replace(/\/+$/, "");
+  const normalizedFilename = (archivedFilename ?? "").replace(/^\/+/, "");
+  if (!normalizedPath) return normalizedFilename;
+  if (!normalizedFilename) return normalizedPath;
+  return `${normalizedPath}/${normalizedFilename}`;
+}
+
 export function Documents() {
   const [documents, setDocuments] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const [searchTimeout, setSearchTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [searchTimeout, setSearchTimeout] = useState<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<any | null>(null);
   const [previewFile, setPreviewFile] = useState<{
     fileId: string;
@@ -57,7 +83,9 @@ export function Documents() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [reanalyzingFiles, setReanalyzingFiles] = useState<Set<string>>(new Set());
+  const [reanalyzingFiles, setReanalyzingFiles] = useState<Set<string>>(
+    new Set(),
+  );
 
   const loadDocuments = useCallback(async () => {
     setLoading(true);
@@ -101,7 +129,11 @@ export function Documents() {
 
   const handlePreview = async (doc: any) => {
     const mimeType = doc.mime_type ?? "application/octet-stream";
-    setPreviewFile({ fileId: doc.drive_file_id, mimeType, name: doc.original_name });
+    setPreviewFile({
+      fileId: doc.drive_file_id,
+      mimeType,
+      name: getDisplayedFilename(doc),
+    });
     setPreviewData(null);
     setPreviewLoading(true);
     try {
@@ -122,7 +154,9 @@ export function Documents() {
     setDeleting(true);
     try {
       await api.deleteDocument(driveFileId, deleteDrive);
-      setDocuments((prev) => prev.filter((d) => d.drive_file_id !== driveFileId));
+      setDocuments((prev) =>
+        prev.filter((d) => d.drive_file_id !== driveFileId),
+      );
       setDeleteTarget(null);
     } catch (e) {
       console.error("Delete failed:", e);
@@ -184,20 +218,20 @@ export function Documents() {
           {documents.map((doc) => {
             const categoryColor =
               CATEGORY_COLORS[doc.category] ?? CATEGORY_COLORS.Altro;
-            const statusInfo = STATUS_LABELS[doc.status] ?? STATUS_LABELS.pending;
+            const statusInfo =
+              STATUS_LABELS[doc.status] ?? STATUS_LABELS.pending;
             const StatusIcon = statusInfo.icon;
 
             return (
               <div
                 key={doc.id}
-                className="rounded-lg border border-border p-3 hover:bg-muted/30 transition-colors"
-              >
+                className="rounded-lg border border-border p-3 hover:bg-muted/30 transition-colors">
                 <div className="flex items-start gap-3">
                   <FileText className="mt-0.5 size-5 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="truncate text-sm font-medium">
-                        {doc.original_name}
+                        {getDisplayedFilename(doc)}
                       </p>
                       <span
                         className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
@@ -206,8 +240,7 @@ export function Documents() {
                             : doc.status === "classified"
                               ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                               : "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400"
-                        }`}
-                      >
+                        }`}>
                         <StatusIcon className="size-3" />
                         {statusInfo.label}
                       </span>
@@ -217,7 +250,8 @@ export function Documents() {
                       {doc.category && (
                         <span className="flex items-center gap-1">
                           <Tag className="size-3" />
-                          <span className={`rounded-full px-1.5 py-0.5 ${categoryColor}`}>
+                          <span
+                            className={`rounded-full px-1.5 py-0.5 ${categoryColor}`}>
                             {doc.category}
                           </span>
                         </span>
@@ -237,14 +271,17 @@ export function Documents() {
                       {doc.is_tax_relevant === 1 && (
                         <span className="flex items-center gap-1 text-yellow-600">
                           <Receipt className="size-3" />
-                          Tasse
+                          Imposte
                         </span>
                       )}
                     </div>
 
                     {doc.archived_path && (
                       <p className="mt-1 font-mono text-xs text-muted-foreground">
-                        {doc.archived_path}/{doc.archived_filename}
+                        {formatArchivedLocation(
+                          doc.archived_path,
+                          doc.archived_filename,
+                        )}
                       </p>
                     )}
                   </div>
@@ -255,16 +292,14 @@ export function Documents() {
                       variant="ghost"
                       size="icon-xs"
                       onClick={() => handlePreview(doc)}
-                      title="Anteprima"
-                    >
+                      title="Anteprima">
                       <Eye className="size-3.5" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon-xs"
                       onClick={() => handleOpenInDrive(doc.drive_file_id)}
-                      title="Apri in Google Drive"
-                    >
+                      title="Apri in Google Drive">
                       <ExternalLink className="size-3.5" />
                     </Button>
                     {doc.classification_json && (
@@ -272,8 +307,7 @@ export function Documents() {
                         variant="ghost"
                         size="icon-xs"
                         onClick={() => setSelectedDoc(doc)}
-                        title="Vedi dati analizzati"
-                      >
+                        title="Vedi dati analizzati">
                         <Sparkles className="size-3.5 text-blue-500" />
                       </Button>
                     )}
@@ -282,8 +316,7 @@ export function Documents() {
                       size="icon-xs"
                       onClick={() => handleReanalyze(doc)}
                       disabled={reanalyzingFiles.has(doc.drive_file_id)}
-                      title="Ri-analizza"
-                    >
+                      title="Ri-analizza">
                       {reanalyzingFiles.has(doc.drive_file_id) ? (
                         <Loader2 className="size-3.5 animate-spin" />
                       ) : (
@@ -294,8 +327,7 @@ export function Documents() {
                       variant="ghost"
                       size="icon-xs"
                       onClick={() => setDeleteTarget(doc)}
-                      title="Elimina"
-                    >
+                      title="Elimina">
                       <Trash2 className="size-3.5 text-red-500" />
                     </Button>
                   </div>
@@ -320,8 +352,7 @@ export function Documents() {
                 onClick={() => {
                   setPreviewFile(null);
                   setPreviewData(null);
-                }}
-              >
+                }}>
                 <X className="size-4" />
               </Button>
             </div>
@@ -376,14 +407,17 @@ export function Documents() {
 
       {/* Delete Confirmation Dialog */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => !deleting && setDeleteTarget(null)}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          onClick={() => !deleting && setDeleteTarget(null)}>
           <div
             className="mx-4 w-full max-w-md rounded-xl bg-background shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+            onClick={(e) => e.stopPropagation()}>
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-medium">Elimina documento</h3>
-              <p className="mt-1 truncate text-xs text-muted-foreground">{deleteTarget.original_name}</p>
+              <p className="mt-1 truncate text-xs text-muted-foreground">
+                {getDisplayedFilename(deleteTarget)}
+              </p>
             </div>
             <div className="space-y-2 p-4">
               <p className="text-sm text-muted-foreground">
@@ -391,25 +425,33 @@ export function Documents() {
               </p>
               <div className="space-y-2 pt-2">
                 <button
-                  onClick={() => handleDelete(deleteTarget.drive_file_id, false)}
+                  onClick={() =>
+                    handleDelete(deleteTarget.drive_file_id, false)
+                  }
                   disabled={deleting}
-                  className="flex w-full items-center gap-3 rounded-lg border border-border p-3 text-left text-sm hover:bg-muted/50 transition-colors disabled:opacity-50"
-                >
+                  className="flex w-full items-center gap-3 rounded-lg border border-border p-3 text-left text-sm hover:bg-muted/50 transition-colors disabled:opacity-50">
                   <Trash2 className="size-4 text-muted-foreground" />
                   <div>
-                    <p className="font-medium">Elimina solo dal database locale</p>
-                    <p className="text-xs text-muted-foreground">Il file resta su Google Drive</p>
+                    <p className="font-medium">
+                      Elimina solo dal database locale
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Il file resta su Google Drive
+                    </p>
                   </div>
                 </button>
                 <button
                   onClick={() => handleDelete(deleteTarget.drive_file_id, true)}
                   disabled={deleting}
-                  className="flex w-full items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-left text-sm hover:bg-red-100 transition-colors dark:border-red-900/50 dark:bg-red-900/20 dark:hover:bg-red-900/30 disabled:opacity-50"
-                >
+                  className="flex w-full items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-left text-sm hover:bg-red-100 transition-colors dark:border-red-900/50 dark:bg-red-900/20 dark:hover:bg-red-900/30 disabled:opacity-50">
                   <Trash2 className="size-4 text-red-500" />
                   <div>
-                    <p className="font-medium text-red-700 dark:text-red-400">Elimina anche da Google Drive</p>
-                    <p className="text-xs text-red-600/70 dark:text-red-400/70">Eliminazione permanente</p>
+                    <p className="font-medium text-red-700 dark:text-red-400">
+                      Elimina anche da Google Drive
+                    </p>
+                    <p className="text-xs text-red-600/70 dark:text-red-400/70">
+                      Eliminazione permanente
+                    </p>
                   </div>
                 </button>
               </div>
@@ -418,8 +460,7 @@ export function Documents() {
               <button
                 onClick={() => setDeleteTarget(null)}
                 disabled={deleting}
-                className="w-full rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted transition-colors disabled:opacity-50"
-              >
+                className="w-full rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted transition-colors disabled:opacity-50">
                 {deleting ? (
                   <span className="flex items-center justify-center gap-2">
                     <Loader2 className="size-3.5 animate-spin" />
@@ -449,7 +490,13 @@ function DocumentDetailDialog({
   onReanalyze: (doc: any) => void;
 }) {
   const classification = doc.classification_json
-    ? (() => { try { return JSON.parse(doc.classification_json); } catch { return null; } })()
+    ? (() => {
+        try {
+          return JSON.parse(doc.classification_json);
+        } catch {
+          return null;
+        }
+      })()
     : null;
 
   const profile = classification?.document_profile;
@@ -461,21 +508,21 @@ function DocumentDetailDialog({
     CATEGORY_COLORS[profile?.category ?? doc.category] ?? CATEGORY_COLORS.Altro;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      onClick={onClose}>
       <div
         className="mx-4 w-full max-w-lg rounded-xl bg-background shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+        onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div className="min-w-0 flex-1">
             <h3 className="text-sm font-medium">Dettaglio Documento</h3>
-            <p className="truncate text-xs text-muted-foreground">{doc.original_name}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {getDisplayedFilename(doc)}
+            </p>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-md p-1 hover:bg-muted"
-          >
+          <button onClick={onClose} className="rounded-md p-1 hover:bg-muted">
             <X className="size-4" />
           </button>
         </div>
@@ -489,35 +536,44 @@ function DocumentDetailDialog({
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Tag className="size-3.5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Categoria:</span>
-                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${categoryColor}`}>
+                <span className="text-xs text-muted-foreground">
+                  Categoria:
+                </span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${categoryColor}`}>
                   {profile?.category ?? doc.category ?? "—"}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <Building2 className="size-3.5 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">Ente:</span>
-                <span className="text-sm">{profile?.entity ?? doc.entity ?? "—"}</span>
+                <span className="text-sm">
+                  {profile?.entity ?? doc.entity ?? "—"}
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <FileType className="size-3.5 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">Tipo:</span>
-                <span className="text-sm">{profile?.document_type ?? doc.document_type ?? "—"}</span>
+                <span className="text-sm">
+                  {profile?.document_type ?? doc.document_type ?? "—"}
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <Calendar className="size-3.5 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">Data:</span>
-                <span className="text-sm">{profile?.document_date ?? doc.document_date ?? "—"}</span>
+                <span className="text-sm">
+                  {profile?.document_date ?? doc.document_date ?? "—"}
+                </span>
               </div>
-              {(profile?.is_tax_relevant || doc.is_tax_relevant === 1) && (
+              {profile?.is_tax_relevant && (
                 <div className="flex items-center gap-2">
                   <Receipt className="size-3.5 text-muted-foreground" />
                   <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
-                    Rilevante per le tasse
+                    Imposte
                   </span>
                   {profile?.tax_notes && (
                     <span className="text-xs text-muted-foreground">
-                      {profile.tax_notes}
+                      {profile?.tax_notes ?? doc.tax_notes}
                     </span>
                   )}
                 </div>
@@ -535,15 +591,23 @@ function DocumentDetailDialog({
                 <div className="flex items-start gap-2">
                   <FolderTree className="mt-0.5 size-3.5 text-muted-foreground" />
                   <div>
-                    <span className="text-xs text-muted-foreground">Percorso:</span>
-                    <p className="font-mono text-sm">{filing.full_suggested_path}</p>
+                    <span className="text-xs text-muted-foreground">
+                      Percorso:
+                    </span>
+                    <p className="font-mono text-sm">
+                      {filing.full_suggested_path}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
                   <FileText className="mt-0.5 size-3.5 text-muted-foreground" />
                   <div>
-                    <span className="text-xs text-muted-foreground">Nome file:</span>
-                    <p className="font-mono text-sm">{filing.suggested_filename}</p>
+                    <span className="text-xs text-muted-foreground">
+                      Nome file:
+                    </span>
+                    <p className="font-mono text-sm">
+                      {filing.suggested_filename}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -560,7 +624,10 @@ function DocumentDetailDialog({
                 <div className="flex items-center gap-2">
                   <Archive className="size-3.5 text-green-600 dark:text-green-400" />
                   <span className="font-mono text-sm text-green-700 dark:text-green-400">
-                    {doc.archived_path}/{doc.archived_filename}
+                    {formatArchivedLocation(
+                      doc.archived_path,
+                      doc.archived_filename,
+                    )}
                   </span>
                 </div>
               </div>
@@ -586,8 +653,7 @@ function DocumentDetailDialog({
                           financial.is_paid
                             ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                             : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                        }`}
-                      >
+                        }`}>
                         {financial.is_paid ? "Pagato" : "Non pagato"}
                       </span>
                     )}
@@ -611,7 +677,9 @@ function DocumentDetailDialog({
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Brain className="size-3.5 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">Confidenza:</span>
+                  <span className="text-xs text-muted-foreground">
+                    Confidenza:
+                  </span>
                   <div className="flex-1">
                     <div className="h-2 overflow-hidden rounded-full bg-muted">
                       <div
@@ -659,22 +727,19 @@ function DocumentDetailDialog({
         <div className="flex items-center gap-2 border-t border-border px-4 py-3">
           <button
             onClick={() => onReanalyze(doc)}
-            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
-          >
+            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted transition-colors">
             <RefreshCw className="size-3.5" />
             Ri-analizza
           </button>
           <button
             onClick={() => onDelete(doc)}
-            className="flex items-center gap-1.5 rounded-md border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 transition-colors dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20"
-          >
+            className="flex items-center gap-1.5 rounded-md border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 transition-colors dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20">
             <Trash2 className="size-3.5" />
             Elimina
           </button>
           <button
             onClick={onClose}
-            className="ml-auto rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
-          >
+            className="ml-auto rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted transition-colors">
             Chiudi
           </button>
         </div>
