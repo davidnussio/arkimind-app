@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Button } from "./ui/button";
 import {
   Archive,
@@ -12,41 +13,24 @@ import {
   FileText,
   Brain,
   Banknote,
+  Pencil,
 } from "lucide-react";
+import { CATEGORY_COLORS } from "@/lib/constants";
 
 interface ClassificationResultProps {
   classification: any;
   fileName: string;
   onArchive: () => void;
+  onEdit?: () => void;
   onClose: () => void;
   archiving: boolean;
 }
-
-const CATEGORY_COLORS: Record<string, string> = {
-  Assicurazione:
-    "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  Banca:
-    "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-  Fatture:
-    "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
-  Imposte: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-  Salute: "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400",
-  Lavoro:
-    "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
-  Abitazione:
-    "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-  Veicolo: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400",
-  Amministrativo:
-    "bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-400",
-  Educazione:
-    "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
-  Altro: "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400",
-};
 
 export function ClassificationResult({
   classification,
   fileName,
   onArchive,
+  onEdit,
   onClose,
   archiving,
 }: ClassificationResultProps) {
@@ -58,9 +42,17 @@ export function ClassificationResult({
   const categoryColor =
     CATEGORY_COLORS[profile?.category] ?? CATEGORY_COLORS.Altro;
 
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="mx-4 w-full max-w-lg rounded-xl bg-background shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="mx-4 w-full max-w-lg rounded-xl bg-background shadow-xl" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div className="min-w-0 flex-1">
@@ -81,11 +73,8 @@ export function ClassificationResult({
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Tag className="size-3.5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">
-                  Categoria:
-                </span>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${categoryColor}`}>
+                <span className="text-xs text-muted-foreground">Categoria:</span>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${categoryColor}`}>
                   {profile?.category}
                 </span>
               </div>
@@ -111,9 +100,7 @@ export function ClassificationResult({
                     Imposte
                   </span>
                   {profile.tax_notes && (
-                    <span className="text-xs text-muted-foreground">
-                      {profile.tax_notes}
-                    </span>
+                    <span className="text-xs text-muted-foreground">{profile.tax_notes}</span>
                   )}
                 </div>
               )}
@@ -129,23 +116,15 @@ export function ClassificationResult({
               <div className="flex items-start gap-2">
                 <FolderTree className="mt-0.5 size-3.5 text-muted-foreground" />
                 <div>
-                  <span className="text-xs text-muted-foreground">
-                    Percorso:
-                  </span>
-                  <p className="font-mono text-sm">
-                    {filing?.full_suggested_path}
-                  </p>
+                  <span className="text-xs text-muted-foreground">Percorso:</span>
+                  <p className="font-mono text-sm">{filing?.full_suggested_path}</p>
                 </div>
               </div>
               <div className="flex items-start gap-2">
                 <FileText className="mt-0.5 size-3.5 text-muted-foreground" />
                 <div>
-                  <span className="text-xs text-muted-foreground">
-                    Nome file:
-                  </span>
-                  <p className="font-mono text-sm">
-                    {filing?.suggested_filename}
-                  </p>
+                  <span className="text-xs text-muted-foreground">Nome file:</span>
+                  <p className="font-mono text-sm">{filing?.suggested_filename}</p>
                 </div>
               </div>
             </div>
@@ -165,12 +144,11 @@ export function ClassificationResult({
                       {financial.currency} {financial.amount?.toFixed(2)}
                     </span>
                     {financial.is_paid != null && (
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs ${
-                          financial.is_paid
-                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                            : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                        }`}>
+                      <span className={`rounded-full px-2 py-0.5 text-xs ${
+                        financial.is_paid
+                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                          : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                      }`}>
                         {financial.is_paid ? "Pagato" : "Non pagato"}
                       </span>
                     )}
@@ -194,22 +172,15 @@ export function ClassificationResult({
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Brain className="size-3.5 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">
-                    Confidenza:
-                  </span>
+                  <span className="text-xs text-muted-foreground">Confidenza:</span>
                   <div className="flex-1">
                     <div className="h-2 overflow-hidden rounded-full bg-muted">
                       <div
                         className={`h-full rounded-full ${
-                          analysis.confidence_score > 0.8
-                            ? "bg-green-500"
-                            : analysis.confidence_score > 0.5
-                              ? "bg-yellow-500"
-                              : "bg-red-500"
+                          analysis.confidence_score > 0.8 ? "bg-green-500"
+                            : analysis.confidence_score > 0.5 ? "bg-yellow-500" : "bg-red-500"
                         }`}
-                        style={{
-                          width: `${(analysis.confidence_score * 100).toFixed(0)}%`,
-                        }}
+                        style={{ width: `${(analysis.confidence_score * 100).toFixed(0)}%` }}
                       />
                     </div>
                   </div>
@@ -222,9 +193,7 @@ export function ClassificationResult({
                     Richiede validazione umana
                   </p>
                 )}
-                <p className="text-xs text-muted-foreground">
-                  {analysis.reasoning}
-                </p>
+                <p className="text-xs text-muted-foreground">{analysis.reasoning}</p>
               </div>
             </section>
           )}
@@ -232,23 +201,17 @@ export function ClassificationResult({
 
         {/* Footer */}
         <div className="flex gap-2 border-t border-border px-4 py-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onClick={onClose}>
+          <Button variant="outline" size="sm" className="flex-1" onClick={onClose}>
             Chiudi
           </Button>
-          <Button
-            size="sm"
-            className="flex-1"
-            onClick={onArchive}
-            disabled={archiving}>
-            {archiving ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <Archive className="size-3.5" />
-            )}
+          {onEdit && (
+            <Button variant="outline" size="sm" className="flex-1" onClick={onEdit}>
+              <Pencil className="size-3.5" />
+              Modifica
+            </Button>
+          )}
+          <Button size="sm" className="flex-1" onClick={onArchive} disabled={archiving}>
+            {archiving ? <Loader2 className="size-3.5 animate-spin" /> : <Archive className="size-3.5" />}
             Archivia
           </Button>
         </div>

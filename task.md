@@ -35,28 +35,28 @@
 ### Frontend
 
 - [ ] **Stato globale assente**: Ogni componente gestisce il proprio stato con `useState`. Usare un context o state manager leggero (Zustand, Jotai) per condividere auth status, settings, e notifiche.
-- [ ] **Componente modale duplicato**: Il codice del preview modal è copiato identico in `Dashboard.tsx` e `Documents.tsx`. Estrarre in un componente riutilizzabile.
+- [x] **Componente modale duplicato**: ~~Il codice del preview modal è copiato identico in `Dashboard.tsx` e `Documents.tsx`.~~ Completato: estratto componente riutilizzabile `PreviewModal` con gestione Escape e click su overlay, usato in entrambi i componenti.
 - [ ] **Nessun sistema di notifiche globale**: I messaggi di errore/successo sono gestiti localmente in ogni componente. Creare un toast/notification system centralizzato.
 - [ ] **`index.html` ha titolo generico**: Il titolo è "React + Tailwind + Vite" invece di "Arkimind".
 - [ ] **Nessun error boundary React**: Se un componente crasha, l'intera app diventa bianca. Aggiungere `ErrorBoundary`.
-- [ ] **`CATEGORY_COLORS` duplicato**: La mappa dei colori per categoria è copiata in `ClassificationResult.tsx` e `Documents.tsx`. Centralizzare.
+- [x] **`CATEGORY_COLORS` duplicato**: ~~La mappa dei colori per categoria è copiata in `ClassificationResult.tsx` e `Documents.tsx`.~~ Completato: centralizzato in `src/mainview/lib/constants.ts` e importato in entrambi i componenti.
 
 ## 🟢 Miglioramenti UI/UX
 
 ### Esperienza Utente
 
-- [ ] **Nessun onboarding / wizard iniziale**: L'utente deve sapere già cosa fare (configurare credentials, login, aggiungere cartelle). Aggiungere un wizard di primo avvio.
-- [ ] **Nessuna conferma prima dell'archiviazione**: Il click su "Archivia" sposta immediatamente il file. Aggiungere un dialog di conferma con anteprima del percorso.
-- [ ] **Impossibile modificare la classificazione prima dell'archiviazione**: L'utente non può correggere categoria, ente, data o percorso suggerito dall'AI. Aggiungere form di editing.
-- [ ] **Nessun feedback di progresso per upload multipli**: L'upload di più file mostra solo uno spinner generico. Aggiungere progress bar per file.
-- [ ] **Ricerca documenti solo testuale**: La ricerca è un semplice `LIKE`. Aggiungere filtri per categoria, stato, data, rilevanza fiscale.
-- [ ] **Nessuna paginazione**: I documenti sono caricati tutti (limit 100). Aggiungere paginazione o infinite scroll.
-- [ ] **Nessun dark mode toggle**: I CSS supportano dark mode ma non c'è modo di attivarlo dall'UI.
-- [ ] **Nessuna scorciatoia da tastiera**: Mancano shortcut per azioni comuni (refresh, cerca, naviga tra tab).
-- [ ] **Modali non chiudibili con Escape**: I dialog modali non gestiscono il tasto Escape per la chiusura.
-- [ ] **Nessun indicatore di "ultima sincronizzazione"**: L'utente non sa quando i dati sono stati aggiornati l'ultima volta.
-- [ ] **Nessuna animazione di transizione tra tab**: Il cambio tab è istantaneo senza transizione.
-- [ ] **Sidebar non collassabile**: Su schermi piccoli la sidebar occupa spazio fisso.
+- [x] **Nessun onboarding / wizard iniziale**: ~~L'utente deve sapere già cosa fare.~~ Completato: creato componente `OnboardingWizard` con 6 step (welcome, auth, api, archive, inbox, done) che guida l'utente nella configurazione iniziale.
+- [x] **Nessuna conferma prima dell'archiviazione**: ~~Il click su "Archivia" sposta immediatamente il file.~~ Completato: creato `ArchiveConfirmDialog` che mostra anteprima del percorso di destinazione prima di procedere.
+- [x] **Impossibile modificare la classificazione prima dell'archiviazione**: ~~L'utente non può correggere categoria, ente, data o percorso suggerito dall'AI.~~ Completato: creato `ClassificationEditor` con form per modificare categoria, ente, tipo, data, percorso e nome file. Pulsante "Modifica" aggiunto in `ClassificationResult` e nella lista file della Dashboard.
+- [x] **Nessun feedback di progresso per upload multipli**: ~~L'upload di più file mostra solo uno spinner generico.~~ Completato: creato componente `UploadProgress` con progress bar globale e stato per-file (pending/uploading/done/error).
+- [x] **Ricerca documenti solo testuale**: ~~La ricerca è un semplice `LIKE`.~~ Completato: aggiunto pannello filtri avanzati in `Documents` con dropdown per categoria, stato e rilevanza fiscale, applicati lato client sui risultati.
+- [x] **Nessuna paginazione**: ~~I documenti sono caricati tutti (limit 100).~~ Completato: aggiunta paginazione client-side con 20 documenti per pagina e navigazione prev/next.
+- [x] **Nessun dark mode toggle**: ~~I CSS supportano dark mode ma non c'è modo di attivarlo dall'UI.~~ Completato: aggiunto toggle dark/light mode nella sidebar con persistenza in localStorage e rispetto della preferenza di sistema come default.
+- [x] **Nessuna scorciatoia da tastiera**: ~~Mancano shortcut per azioni comuni.~~ Completato: aggiunte scorciatoie ⌘1/2/3 (tab), ⌘K (cerca), ⌘R (refresh), ⌘B (sidebar), ⌘/ (help scorciatoie), Esc (chiudi modali). Dialog help accessibile dalla sidebar.
+- [x] **Modali non chiudibili con Escape**: ~~I dialog modali non gestiscono il tasto Escape.~~ Completato: tutti i modali (PreviewModal, ClassificationResult, ClassificationEditor, ArchiveConfirmDialog, FolderBrowser, DeleteDialog, DocumentDetailDialog, ShortcutsDialog) ora gestiscono Escape e click su overlay.
+- [x] **Nessun indicatore di "ultima sincronizzazione"**: ~~L'utente non sa quando i dati sono stati aggiornati l'ultima volta.~~ Completato: aggiunto indicatore "Ultimo aggiornamento: HH:MM" nella sidebar, aggiornato ad ogni refresh della Dashboard.
+- [x] **Nessuna animazione di transizione tra tab**: ~~Il cambio tab è istantaneo senza transizione.~~ Completato: aggiunta animazione fade-in con leggero slide-up (200ms) al cambio tab tramite CSS keyframes.
+- [x] **Sidebar non collassabile**: ~~Su schermi piccoli la sidebar occupa spazio fisso.~~ Completato: sidebar collassabile con transizione animata (w-52 ↔ w-14), toggle nella sidebar e shortcut ⌘B. In modalità compressa mostra solo icone con tooltip.
 
 ### Design Visivo
 

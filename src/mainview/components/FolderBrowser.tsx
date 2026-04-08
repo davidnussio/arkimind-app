@@ -27,6 +27,14 @@ interface BreadcrumbItem {
 }
 
 export function FolderBrowser({ title, onSelect, onClose }: FolderBrowserProps) {
+  // Close on Escape
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
   const [folders, setFolders] = useState<DriveFolder[]>([]);
   const [loading, setLoading] = useState(true);
   const [breadcrumb, setBreadcrumb] = useState<BreadcrumbItem[]>([
