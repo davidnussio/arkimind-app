@@ -20,6 +20,7 @@ import {
   ExternalLink,
   Trash2,
   RefreshCw,
+  FolderInput,
 } from "lucide-react";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -66,6 +67,32 @@ function formatArchivedLocation(
   return `${normalizedPath}/${normalizedFilename}`;
 }
 
+/** Show rearchive button when there's a filing strategy AND either
+ *  the doc is not archived or the archived location differs from suggestion. */
+function shouldShowRearchive(doc: any): boolean {
+  let classification: any = null;
+  try {
+    classification = doc.classification_json ? JSON.parse(doc.classification_json) : null;
+  } catch { return false; }
+  const filing = classification?.filing_strategy;
+  if (!filing?.full_suggested_path || !filing?.suggested_filename) return false;
+
+  // Already archived at the exact suggested location → hide
+  if (doc.archived_path || doc.archived_filename) {
+    const currentPath = (doc.archived_path ?? "").replace(/\/+$/, "");
+    const suggestedPath = (filing.full_suggested_path ?? "").replace(/\/+$/, "");
+    if (currentPath !== suggestedPath) return true;
+
+    // Compare filenames ignoring extension (archiveFile may append source ext)
+    const stripExt = (f: string) => f.replace(/\.[^.]+$/, "");
+    const currentBase = stripExt((doc.archived_filename ?? "").replace(/^\/+/, ""));
+    const suggestedBase = stripExt((filing.suggested_filename ?? "").replace(/^\/+/, ""));
+    if (currentBase === suggestedBase) return false;
+  }
+
+  return true;
+}
+
 export function Documents() {
   const [documents, setDocuments] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -84,6 +111,9 @@ export function Documents() {
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [reanalyzingFiles, setReanalyzingFiles] = useState<Set<string>>(
+    new Set(),
+  );
+  const [rearchivingFiles, setRearchivingFiles] = useState<Set<string>>(
     new Set(),
   );
 
@@ -176,6 +206,36 @@ export function Documents() {
       console.error("Re-analyze failed:", e);
     } finally {
       setReanalyzingFiles((prev) => {
+        const next = new Set(prev);
+        next.delete(doc.drive_file_id);
+        return next;
+      });
+    }
+  };
+
+  const handleRearchive = async (doc: any) => {
+    const classification = doc.classification_json
+      ? (() => { try { return JSON.parse(doc.classification_json); } catch { return null; } })()
+      : null;
+    const filing = classification?.filing_strategy;
+    if (!filing?.full_suggested_path || !filing?.suggested_filename) {
+      console.error("No filing strategy available");
+      return;
+    }
+    setRearchivingFiles((prev) => new Set(prev).add(doc.drive_file_id));
+    try {
+      const result = await api.archiveFile(
+        doc.drive_file_id,
+        filing.full_suggested_path,
+        filing.suggested_filename,
+      );
+      if (result.success) {
+        loadDocuments();
+      }
+    } catch (e) {
+      console.error("Re-archive failed:", e);
+    } finally {
+      setRearchivingFiles((prev) => {
         const next = new Set(prev);
         next.delete(doc.drive_file_id);
         return next;
@@ -323,6 +383,20 @@ export function Documents() {
                         <RefreshCw className="size-3.5" />
                       )}
                     </Button>
+                    {shouldShowRearchive(doc) && (
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={() => handleRearchive(doc)}
+                        disabled={rearchivingFiles.has(doc.drive_file_id)}
+                        title="Riarchivia (sposta e rinomina)">
+                        {rearchivingFiles.has(doc.drive_file_id) ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <FolderInput className="size-3.5 text-green-600" />
+                        )}
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon-xs"
@@ -401,6 +475,10 @@ export function Documents() {
           onReanalyze={(doc: any) => {
             setSelectedDoc(null);
             handleReanalyze(doc);
+          }}
+          onRearchive={(doc: any) => {
+            setSelectedDoc(null);
+            handleRearchive(doc);
           }}
         />
       )}
@@ -483,11 +561,13 @@ function DocumentDetailDialog({
   onClose,
   onDelete,
   onReanalyze,
+  onRearchive,
 }: {
   doc: any;
   onClose: () => void;
   onDelete: (doc: any) => void;
   onReanalyze: (doc: any) => void;
+  onRearchive: (doc: any) => void;
 }) {
   const classification = doc.classification_json
     ? (() => {
@@ -731,6 +811,14 @@ function DocumentDetailDialog({
             <RefreshCw className="size-3.5" />
             Ri-analizza
           </button>
+          {shouldShowRearchive(doc) && (
+            <button
+              onClick={() => onRearchive(doc)}
+              className="flex items-center gap-1.5 rounded-md border border-green-200 px-3 py-1.5 text-sm text-green-700 hover:bg-green-50 transition-colors dark:border-green-900/50 dark:text-green-400 dark:hover:bg-green-900/20">
+              <FolderInput className="size-3.5" />
+              Riarchivia
+            </button>
+          )}
           <button
             onClick={() => onDelete(doc)}
             className="flex items-center gap-1.5 rounded-md border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 transition-colors dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20">

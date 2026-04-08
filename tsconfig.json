@@ -20,6 +20,6 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["src/mainview"],
+  "include": ["src/mainview", "src/shared"],
   "exclude": ["node_modules", "dist", "build", "../../package/dist"]
 }

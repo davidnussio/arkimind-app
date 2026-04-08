@@ -1,8 +1,15 @@
-import { ApplicationMenu, BrowserWindow, Updater, Utils } from "electrobun/bun";
+import {
+  ApplicationMenu,
+  BrowserView,
+  BrowserWindow,
+  Updater,
+  Utils,
+} from "electrobun/bun";
 import * as path from "node:path";
 import * as db from "./db";
 import * as auth from "./auth";
 import * as drive from "./drive";
+import type { ArkimindRPC } from "../shared/types";
 
 // Application menu with standard Edit roles (enables Cmd+C/V/X)
 ApplicationMenu.setApplicationMenu([
@@ -32,7 +39,6 @@ ApplicationMenu.setApplicationMenu([
   },
 ]);
 
-const API_PORT = 3457;
 const DEV_SERVER_PORT = 5173;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 
@@ -40,112 +46,70 @@ const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 db.getDb();
 console.log("Database initialized");
 
-// --- HTTP API Server ---
-function corsHeaders(): Record<string, string> {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-  };
-}
+// Preview chunk cache: fileId -> { mimeType, chunks[] }
+const CHUNK_SIZE = 256 * 1024; // 256KB base64 per chunk (~192KB raw)
+const previewCache = new Map<string, { mimeType: string; chunks: string[] }>();
 
-function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json", ...corsHeaders() },
-  });
-}
-
-function errorResponse(message: string, status = 500): Response {
-  return json({ error: message }, status);
-}
-
-Bun.serve({
-  port: API_PORT,
-  idleTimeout: 120,
-  async fetch(req) {
-    const url = new URL(req.url);
-    const method = req.method;
-    const pathname = url.pathname;
-
-    // CORS preflight
-    if (method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: corsHeaders() });
-    }
-
-    try {
+// --- RPC Handlers ---
+const rpc = BrowserView.defineRPC<ArkimindRPC>({
+  maxRequestTime: 120_000,
+  handlers: {
+    requests: {
       // --- Auth ---
-      if (pathname === "/api/auth/status" && method === "GET") {
-        return json({ authenticated: auth.isAuthenticated() });
-      }
+      getAuthStatus: () => ({ authenticated: auth.isAuthenticated() }),
 
-      if (pathname === "/api/auth/login" && method === "POST") {
-        const result = await auth.login();
-        return json(result);
-      }
+      login: async () => await auth.login(),
 
-      if (pathname === "/api/auth/logout" && method === "POST") {
+      logout: () => {
         auth.logout();
-        return json({ success: true });
-      }
+        return { success: true };
+      },
 
       // --- Settings ---
-      if (pathname === "/api/settings" && method === "GET") {
+      getSettings: () => {
         const settings = db.getAllSettings();
-        return json({
+        return {
           apiKey: settings["api_key"] ?? null,
           apiBaseUrl: settings["api_base_url"] ?? null,
           archiveRootFolderId: settings["archive_root_folder_id"] ?? null,
           archiveRootFolderName: settings["archive_root_folder_name"] ?? null,
-        });
-      }
+        };
+      },
 
-      if (pathname.startsWith("/api/settings/") && method === "PUT") {
-        const key = pathname.replace("/api/settings/", "");
-        const body = (await req.json()) as { value: string };
-        db.setSetting(key, body.value);
-        return json({ success: true });
-      }
+      saveSetting: ({ key, value }) => {
+        db.setSetting(key, value);
+        return { success: true };
+      },
 
-      if (pathname.startsWith("/api/settings/") && method === "DELETE") {
-        const key = pathname.replace("/api/settings/", "");
+      deleteSetting: ({ key }) => {
         db.deleteSetting(key);
-        return json({ success: true });
-      }
+        return { success: true };
+      },
 
       // --- Inbox Folders ---
-      if (pathname === "/api/inbox-folders" && method === "GET") {
+      getInboxFolders: () => {
         const folders = db.getInboxFolders();
-        return json(
-          folders.map((f) => ({
-            id: f.id,
-            driveFolderId: f.drive_folder_id,
-            name: f.name,
-          })),
-        );
-      }
+        return folders.map((f) => ({
+          id: f.id,
+          driveFolderId: f.drive_folder_id,
+          name: f.name,
+        }));
+      },
 
-      if (pathname === "/api/inbox-folders" && method === "POST") {
-        const body = (await req.json()) as {
-          driveFolderId: string;
-          name: string;
-        };
-        db.addInboxFolder(body.driveFolderId, body.name);
-        return json({ success: true });
-      }
+      addInboxFolder: ({ driveFolderId, name }) => {
+        db.addInboxFolder(driveFolderId, name);
+        return { success: true };
+      },
 
-      if (pathname.startsWith("/api/inbox-folders/") && method === "DELETE") {
-        const id = parseInt(pathname.replace("/api/inbox-folders/", ""), 10);
+      removeInboxFolder: ({ id }) => {
         db.removeInboxFolder(id);
-        return json({ success: true });
-      }
+        return { success: true };
+      },
 
-      // --- Drive: List files ---
-      if (pathname.startsWith("/api/drive/files/") && method === "GET") {
-        const folderId = pathname.replace("/api/drive/files/", "");
+      // --- Drive ---
+      listFiles: async ({ folderId }) => {
         const files = await drive.listFiles(folderId);
-        // Enrich with local classification status
-        const enriched = files.map((f) => {
+        return files.map((f) => {
           const doc = db.getDocumentByFileId(f.id);
           return {
             ...f,
@@ -155,54 +119,53 @@ Bun.serve({
               : null,
           };
         });
-        return json(enriched);
-      }
+      },
 
-      // --- Drive: Browse folders ---
-      if (pathname.startsWith("/api/drive/folders") && method === "GET") {
-        const parentId = url.searchParams.get("parentId") ?? undefined;
+      browseFolders: async ({ parentId }) => {
         const folders = await drive.listFolders(parentId);
-        return json(folders);
-      }
+        return folders;
+      },
 
-      // --- Drive: File preview ---
-      if (pathname.startsWith("/api/drive/preview/") && method === "GET") {
-        const fileId = pathname.replace("/api/drive/preview/", "");
-        const mimeType =
-          url.searchParams.get("mimeType") ?? "application/octet-stream";
-        const dataUrl = await drive.getFilePreview(fileId, mimeType);
-        if (!dataUrl) return json(null);
-        return json({ dataUrl });
-      }
+      getFilePreview: async ({ fileId, mimeType }) => {
+        try {
+          const dataUrl = await drive.getFilePreview(fileId, mimeType);
+          if (!dataUrl) return null;
 
-      // --- Drive: Upload file ---
-      if (pathname.startsWith("/api/drive/upload/") && method === "POST") {
-        const folderId = pathname.replace("/api/drive/upload/", "");
-        const contentType = req.headers.get("content-type") ?? "";
+          const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/s);
+          if (!match) return null;
 
-        if (contentType.includes("multipart/form-data")) {
-          const formData = await req.formData();
-          const file = formData.get("file") as File | null;
-          if (!file) return errorResponse("No file provided", 400);
+          const actualMime = match[1];
+          const base64 = match[2];
 
-          const bytes = new Uint8Array(await file.arrayBuffer());
-          const uploaded = await drive.uploadFile(
-            folderId,
-            file.name,
-            file.type || "application/octet-stream",
-            bytes,
-          );
-          return json({ success: true, file: uploaded });
+          const chunks: string[] = [];
+          for (let i = 0; i < base64.length; i += CHUNK_SIZE) {
+            chunks.push(base64.slice(i, i + CHUNK_SIZE));
+          }
+
+          previewCache.set(fileId, { mimeType: actualMime, chunks });
+
+          return { mimeType: actualMime, totalChunks: chunks.length };
+        } catch (e) {
+          console.error("Preview failed:", e);
+          return null;
         }
+      },
 
-        return errorResponse("Expected multipart/form-data", 400);
-      }
+      getPreviewChunk: ({ fileId, chunkIndex }) => {
+        const cached = previewCache.get(fileId);
+        if (!cached || chunkIndex < 0 || chunkIndex >= cached.chunks.length) {
+          throw new Error("Chunk not found");
+        }
+        const data = cached.chunks[chunkIndex];
+        // Clean up if last chunk
+        if (chunkIndex === cached.chunks.length - 1) {
+          previewCache.delete(fileId);
+        }
+        return { data };
+      },
 
-      // --- File picker dialog (Electrobun) ---
-      if (pathname === "/api/file-dialog" && method === "POST") {
-        const body = (await req.json()) as { folderId: string };
-        if (!body.folderId) return errorResponse("folderId is required", 400);
-
+      // --- Upload ---
+      uploadFileFromDialog: async ({ folderId }) => {
         const result = await Utils.openFileDialog({
           allowedFileTypes: "*",
           canChooseFiles: true,
@@ -211,17 +174,17 @@ Bun.serve({
         });
 
         if (!result || !Array.isArray(result) || result.length === 0) {
-          return json({ success: true, uploaded: [] });
+          return { success: true, uploaded: [] };
         }
 
-        const uploaded: any[] = [];
+        const uploaded: drive.DriveFile[] = [];
         for (const filePath of result) {
           const file = Bun.file(filePath);
           const bytes = new Uint8Array(await file.arrayBuffer());
           const fileName = filePath.split("/").pop() ?? "file";
           const mimeType = file.type || "application/octet-stream";
           const driveFile = await drive.uploadFile(
-            body.folderId,
+            folderId,
             fileName,
             mimeType,
             bytes,
@@ -229,25 +192,34 @@ Bun.serve({
           uploaded.push(driveFile);
         }
 
-        return json({ success: true, uploaded });
-      }
+        return { success: true, uploaded };
+      },
 
-      // --- Classify file ---
-      if (pathname.startsWith("/api/classify/") && method === "POST") {
-        const fileId = pathname.replace("/api/classify/", "");
+      uploadFileData: async ({ folderId, fileName, mimeType, dataBase64 }) => {
+        const bytes = new Uint8Array(
+          Buffer.from(dataBase64, "base64"),
+        );
+        const driveFile = await drive.uploadFile(
+          folderId,
+          fileName,
+          mimeType,
+          bytes,
+        );
+        return { success: true, file: driveFile };
+      },
+
+      // --- Classification & Archive ---
+      classifyFile: async ({ fileId }) => {
         const apiKey = db.getSetting("api_key");
         const apiBaseUrl = db.getSetting("api_base_url");
 
-        if (!apiKey) return errorResponse("API key not configured", 400);
-        if (!apiBaseUrl)
-          return errorResponse("API base URL not configured", 400);
+        if (!apiKey) throw new Error("API key not configured");
+        if (!apiBaseUrl) throw new Error("API base URL not configured");
 
-        // Get file metadata and download
         const fileMeta = await drive.getFileMetadata(fileId);
         const fileBytes = await drive.downloadFile(fileId);
 
-        // Create FormData and send to classification API
-        const blob = new Blob([fileBytes], { type: fileMeta.mimeType });
+        const blob = new Blob([fileBytes.buffer as ArrayBuffer], { type: fileMeta.mimeType });
         const formData = new FormData();
         formData.append("file", blob, fileMeta.name);
 
@@ -262,15 +234,17 @@ Bun.serve({
 
         if (!classifyRes.ok) {
           const errText = await classifyRes.text();
-          return errorResponse(
+          throw new Error(
             `Classification API error (${classifyRes.status}): ${errText}`,
-            502,
           );
         }
 
         const classification = await classifyRes.json();
 
-        // Save to database
+        // Preserve archived status when re-classifying
+        const existingDoc = db.getDocumentByFileId(fileId);
+        const wasArchived = existingDoc?.status === "archived";
+
         db.saveDocument({
           driveFileId: fileId,
           originalName: fileMeta.name,
@@ -282,47 +256,36 @@ Bun.serve({
           documentDate: classification.document_profile?.document_date ?? "",
           isTaxRelevant:
             classification.document_profile?.is_tax_relevant ?? false,
-          status: "classified",
+          status: wasArchived ? "archived" : "classified",
           inboxFolderId: fileMeta.parents?.[0],
+          archivedPath: existingDoc?.archived_path ?? undefined,
+          archivedFilename: existingDoc?.archived_filename ?? undefined,
         });
 
-        // Reset archive fields when re-classifying
-        db.resetDocumentArchiveStatus(fileId);
+        return { success: true, classification };
+      },
 
-        return json({ success: true, classification });
-      }
-
-      // --- Archive file ---
-      if (pathname.startsWith("/api/archive/") && method === "POST") {
-        const fileId = pathname.replace("/api/archive/", "");
-        const body = (await req.json()) as {
-          targetPath: string;
-          targetFilename: string;
-        };
-
-        const normalizedPathSegments = body.targetPath
+      archiveFile: async ({ fileId, targetPath, targetFilename }) => {
+        const normalizedPathSegments = targetPath
           .split("/")
           .map((s) => s.trim())
           .filter((s) => s.length > 0);
         const normalizedTargetPath = normalizedPathSegments.join("/");
-        const normalizedTargetFilename = body.targetFilename.trim();
+        const normalizedTargetFilename = targetFilename.trim();
 
-        if (!normalizedTargetPath)
-          return errorResponse("targetPath is required", 400);
+        if (!normalizedTargetPath) throw new Error("targetPath is required");
         if (!normalizedTargetFilename)
-          return errorResponse("targetFilename is required", 400);
+          throw new Error("targetFilename is required");
 
         const archiveRootId = db.getSetting("archive_root_folder_id");
         if (!archiveRootId)
-          return errorResponse("Archive root folder not configured", 400);
+          throw new Error("Archive root folder not configured");
 
-        // Get file metadata for current parent
         const fileMeta = await drive.getFileMetadata(fileId);
         const currentParentId = fileMeta.parents?.[0];
         if (!currentParentId)
-          return errorResponse("Cannot determine file parent", 400);
+          throw new Error("Cannot determine file parent");
 
-        // Create folder path and move file
         const targetFolder = await drive.getOrCreateFolderPath(
           archiveRootId,
           normalizedPathSegments,
@@ -340,7 +303,6 @@ Bun.serve({
           archivedFilename,
         );
 
-        // Update document status
         db.updateDocumentStatus(
           fileId,
           "archived",
@@ -349,60 +311,42 @@ Bun.serve({
           archivedFilename,
         );
 
-        return json({ success: true });
-      }
+        return { success: true };
+      },
 
-      // --- Delete document ---
-      if (
-        pathname.startsWith("/api/documents/") &&
-        pathname !== "/api/documents/search" &&
-        method === "DELETE"
-      ) {
-        const driveFileId = pathname.replace("/api/documents/", "");
-        const deleteDrive = url.searchParams.get("deleteDrive") === "true";
+      // --- Documents ---
+      getDocuments: ({ limit }) => {
+        return db.getDocuments(limit ?? 100);
+      },
 
+      searchDocuments: ({ query }) => {
+        if (!query) return [];
+        return db.searchDocuments(query);
+      },
+
+      deleteDocument: async ({ driveFileId, deleteDrive }) => {
         if (deleteDrive) {
           try {
             await drive.deleteFile(driveFileId);
           } catch (e) {
             console.error("Drive delete failed:", e);
-            return errorResponse(`Errore eliminazione da Drive: ${e}`, 502);
+            throw new Error(`Errore eliminazione da Drive: ${e}`);
           }
         }
-
         db.deleteDocument(driveFileId);
-        return json({ success: true });
-      }
+        return { success: true };
+      },
 
-      // --- Documents ---
-      if (pathname === "/api/documents" && method === "GET") {
-        const limit = parseInt(url.searchParams.get("limit") ?? "100", 10);
-        return json(db.getDocuments(limit));
-      }
-
-      if (pathname === "/api/documents/search" && method === "GET") {
-        const query = url.searchParams.get("q") ?? "";
-        if (!query) return json([]);
-        return json(db.searchDocuments(query));
-      }
-
-      // --- Open external URL ---
-      if (pathname === "/api/open-external" && method === "POST") {
-        const body = (await req.json()) as { url: string };
-        if (!body.url) return errorResponse("URL is required", 400);
-        const success = Utils.openExternal(body.url);
-        return json({ success });
-      }
-
-      return errorResponse("Not found", 404);
-    } catch (e) {
-      console.error("API error:", e);
-      return errorResponse(`${e}`, 500);
-    }
+      // --- Utils ---
+      openExternal: ({ url }) => {
+        if (!url) throw new Error("URL is required");
+        const success = Utils.openExternal(url);
+        return { success };
+      },
+    },
+    messages: {},
   },
 });
-
-console.log(`API server running on http://localhost:${API_PORT}`);
 
 // --- Electrobun Window ---
 async function getMainViewUrl(): Promise<string> {
@@ -418,7 +362,7 @@ async function getMainViewUrl(): Promise<string> {
   } else {
     const updateInfo = await Updater.checkForUpdate();
     if (updateInfo?.updateAvailable) {
-      console.log("Nuovo aggiornamento canary trovato su localhost!");
+      console.log("Nuovo aggiornamento canary trovato!");
       await Updater.downloadUpdate();
       if (Updater.updateInfo()?.updateReady) {
         await Updater.applyUpdate();
@@ -434,6 +378,7 @@ const mainWindow = new BrowserWindow({
   title: "Arkimind",
   url,
   frame: { width: 1200, height: 800, x: 100, y: 100 },
+  rpc,
 });
 
 console.log("Arkimind started!");
