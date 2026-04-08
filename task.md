@@ -60,9 +60,9 @@
 
 ### Design Visivo
 
-- [ ] **Nessun empty state illustrato**: Gli stati vuoti usano solo icone piccole e testo. Aggiungere illustrazioni o grafiche più accattivanti.
-- [ ] **Nessun favicon / icona app**: Manca il favicon nell'HTML e l'icona dell'applicazione desktop.
-- [ ] **Font di sistema di default**: Non è specificato un font personalizzato. Considerare Inter o Geist per un look più curato.
+- [x] **Nessun empty state illustrato**: ~~Gli stati vuoti usano solo icone piccole e testo.~~ Completato: creato componente `EmptyState` con illustrazioni SVG dedicate (folder, document, search) usato in Dashboard, Documents e Settings.
+- [x] **Nessun favicon / icona app**: ~~Manca il favicon nell'HTML e l'icona dell'applicazione desktop.~~ Completato: aggiunto favicon SVG inline con logo Arkimind, titolo HTML corretto a "Arkimind", lang impostato a "it".
+- [x] **Font di sistema di default**: ~~Non è specificato un font personalizzato.~~ Completato: aggiunto font Inter da Google Fonts come font di default nell'app.
 
 ## 🔵 Funzionalità Mancanti per Competitività
 

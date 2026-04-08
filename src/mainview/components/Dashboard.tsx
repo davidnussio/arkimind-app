@@ -17,6 +17,7 @@ import {
   AlertCircle,
   Upload,
 } from "lucide-react";
+import { EmptyState } from "./EmptyState";
 
 interface InboxFolder {
   id: number;
@@ -290,14 +291,11 @@ export function Dashboard() {
 
   if (inboxFolders.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <FolderOpen className="mb-4 size-12 text-muted-foreground/30" />
-        <h2 className="mb-2 text-lg font-medium">Nessuna cartella inbox</h2>
-        <p className="text-sm text-muted-foreground">
-          Vai nelle Impostazioni per aggiungere cartelle Google Drive da
-          monitorare.
-        </p>
-      </div>
+      <EmptyState
+        illustration="folder"
+        title="Nessuna cartella inbox"
+        description="Vai nelle Impostazioni per aggiungere cartelle Google Drive da monitorare."
+      />
     );
   }
 
@@ -391,12 +389,11 @@ export function Dashboard() {
                   <Loader2 className="size-5 animate-spin text-muted-foreground" />
                 </div>
               ) : folderFiles[folder.driveFolderId].length === 0 ? (
-                <div className="flex flex-col items-center gap-2 py-8 text-center">
-                  <Upload className="size-6 text-muted-foreground/40" />
-                  <p className="text-sm text-muted-foreground">
-                    Cartella vuota — trascina file qui o usa il pulsante Carica
-                  </p>
-                </div>
+                <EmptyState
+                  illustration="folder"
+                  title="Cartella vuota"
+                  description="Trascina file qui o usa il pulsante Carica per aggiungere documenti."
+                />
               ) : (
                 <>
                 {dragOverFolder === folder.driveFolderId && (

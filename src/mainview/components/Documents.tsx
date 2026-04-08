@@ -22,6 +22,7 @@ import {
   RefreshCw,
   FolderInput,
 } from "lucide-react";
+import { EmptyState } from "./EmptyState";
 
 const CATEGORY_COLORS: Record<string, string> = {
   Assicurazione:
@@ -265,14 +266,11 @@ export function Documents() {
           <Loader2 className="size-6 animate-spin text-muted-foreground" />
         </div>
       ) : documents.length === 0 ? (
-        <div className="flex flex-col items-center py-12 text-center">
-          <FileText className="mb-3 size-10 text-muted-foreground/30" />
-          <p className="text-sm text-muted-foreground">
-            {searchQuery
-              ? "Nessun documento trovato"
-              : "Nessun documento analizzato"}
-          </p>
-        </div>
+        <EmptyState
+          illustration={searchQuery ? "search" : "document"}
+          title={searchQuery ? "Nessun documento trovato" : "Nessun documento analizzato"}
+          description={searchQuery ? "Prova a modificare i termini di ricerca." : "Analizza i file dalla Dashboard per vederli qui."}
+        />
       ) : (
         <div className="space-y-2">
           {documents.map((doc) => {

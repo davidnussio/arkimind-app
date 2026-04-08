@@ -14,6 +14,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { FolderBrowser } from "./FolderBrowser";
+import { EmptyState } from "./EmptyState";
 
 interface InboxFolder {
   id: number;
@@ -287,9 +288,11 @@ export function Settings() {
         </p>
 
         {inboxFolders.length === 0 ? (
-          <p className="mb-3 text-sm text-muted-foreground">
-            Nessuna cartella inbox configurata.
-          </p>
+          <EmptyState
+            illustration="folder"
+            title="Nessuna cartella inbox configurata"
+            description="Aggiungi una cartella Google Drive per iniziare a monitorare i documenti."
+          />
         ) : (
           <ul className="mb-3 space-y-2">
             {inboxFolders.map((folder) => (
