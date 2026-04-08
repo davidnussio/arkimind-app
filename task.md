@@ -4,33 +4,33 @@
 
 ### Sicurezza
 
-- [x] **Migrare da HTTP server locale a Electrobun RPC**: L'intera comunicazione frontend↔backend passa da un `Bun.serve()` su `localhost:3457`, accessibile da qualsiasi processo sulla macchina (CORS `*`, zero auth). Electrobun offre un sistema RPC tipizzato nativo (`BrowserView.defineRPC` / `Electroview.defineRPC`) che usa un canale interno isolato. La migrazione elimina in un colpo: server HTTP esposto, problemi CORS, necessità di auth, latenza HTTP. Definire i tipi in `src/shared/types.ts` e sostituire tutte le `fetch` nel frontend con chiamate RPC.
+- [x] **Migrare da HTTP server locale a Electrobun RPC**: ~~L'intera comunicazione frontend↔backend passava da un `Bun.serve()` su `localhost:3457`.~~ Completato: la comunicazione ora usa il canale RPC tipizzato nativo di Electrobun (`BrowserView.defineRPC` / `Electroview.defineRPC`). Tipi definiti in `src/shared/types.ts`, handler in `src/bun/index.ts`, client in `src/mainview/lib/rpc.ts`. Eliminati: server HTTP esposto, CORS, latenza HTTP.
 - [ ] **SQL Injection nelle query Drive API**: In `drive.ts`, i parametri `folderId`, `name`, `parentId` vengono interpolati direttamente nelle query string di Google Drive (`q: \`'${folderId}' in parents\``). Un folderId malevolo potrebbe manipolare la query. Usare escape o validazione degli ID.
 - [ ] **API Key visibile in memoria**: L'API key per il servizio di classificazione è salvata in chiaro nel DB SQLite. Considerare l'uso del Keychain di sistema (macOS) o cifratura.
-- [ ] **Path traversal nel setting key**: `PUT /api/settings/:key` accetta qualsiasi stringa come chiave. Validare che `key` sia una delle chiavi ammesse (whitelist).
-- [ ] **Nessuna validazione input `body.value` nei settings**: Il valore salvato non viene validato né sanitizzato.
+- [ ] **Nessuna validazione input nelle RPC `saveSetting`**: La chiave e il valore passati a `saveSetting` non vengono validati. Aggiungere una whitelist di chiavi ammesse e sanitizzare il valore.
 - [ ] **`credentials.json` presente nella root del progetto**: Il file `credentials.json` esiste nella root (visibile nel file tree). Anche se in `.gitignore`, va rimosso dal repo e spostato in `~/.arkimind/`.
 
 ### Errori e Robustezza
 
 - [ ] **Nessun retry su errori Google Drive API**: Chiamate a Google Drive possono fallire per rate limiting (429) o errori transitori (5xx). Implementare retry con backoff esponenziale.
-- [ ] **Errori di rete non gestiti nel frontend**: `api.ts` lancia eccezioni ma molti componenti le catturano solo con `console.error` senza mostrare feedback all'utente.
+- [ ] **Errori RPC non gestiti nel frontend**: Le chiamate RPC possono lanciare eccezioni ma molti componenti le catturano solo con `console.error` senza mostrare feedback all'utente.
 - [ ] **Preview di file grandi carica tutto in memoria**: `getFilePreview` scarica l'intero file e lo converte in base64. Per file da centinaia di MB questo causa crash. Limitare la dimensione o usare streaming/thumbnail.
-- [ ] **Upload senza limite di dimensione**: Nessun controllo sulla dimensione dei file caricati, né lato client né lato server.
-- [ ] **`parseInt` senza validazione**: In `DELETE /api/inbox-folders/:id`, `parseInt` può restituire `NaN` se l'ID non è numerico. Validare prima dell'uso.
+- [ ] **Upload senza limite di dimensione**: Nessun controllo sulla dimensione dei file caricati. L'upload via RPC (`uploadFileData`) converte l'intero file in base64 in memoria — per file grandi questo è problematico.
+- [x] **`parseInt` senza validazione**: ~~In `DELETE /api/inbox-folders/:id`, `parseInt` poteva restituire `NaN`.~~ Risolto: con RPC tipizzato il parametro `id` è già tipizzato come `number` nello schema.
 - [ ] **Server OAuth callback su porta fissa 3000**: Basso rischio (usata solo per pochi secondi durante il login). Eventualmente gestire il caso di porta occupata con un messaggio chiaro.
-- [ ] **Nessun timeout sulle chiamate fetch del frontend**: Le richieste API possono restare appese indefinitamente. Aggiungere `AbortController` con timeout.
-- [ ] **`any` type usato ovunque**: Molti tipi sono `any` (documenti, classificazioni). Definire interfacce TypeScript proper per tutti i dati.
+- [x] **Nessun timeout sulle chiamate fetch del frontend**: ~~Le richieste API potevano restare appese indefinitamente.~~ Risolto: Electrobun RPC ha `maxRequestTime: 120_000` configurato sia lato bun che webview.
+- [ ] **`any` type usato in alcuni punti**: I tipi principali sono definiti in `src/shared/types.ts`, ma `classification` è ancora `any`. Definire un'interfaccia TypeScript per la risposta di classificazione.
 
 ## 🟡 Problemi di Design e Architettura
 
 ### Backend
 
-- [ ] **Routing manuale con `if/else`**: Il router HTTP è una catena di `if/else` su `pathname`. Usare un micro-router (es. pattern matching) per manutenibilità e per evitare conflitti di route (es. `/api/documents/search` vs `/api/documents/:id`).
+- [x] **Routing manuale con `if/else`**: ~~Il router HTTP era una catena di `if/else` su `pathname`.~~ Risolto: il server HTTP è stato eliminato. Le operazioni sono ora handler RPC tipizzati in `src/bun/index.ts`, con dispatch automatico di Electrobun.
 - [ ] **Nessun logging strutturato**: Solo `console.log/error`. Implementare un logger con livelli (info, warn, error) e timestamp.
 - [ ] **Database non chiuso alla chiusura dell'app**: `_db` non viene mai chiuso con `close()`. Aggiungere cleanup su shutdown.
 - [ ] **Nessuna migrazione versionata del DB**: Le migrazioni sono fatte con `ALTER TABLE ADD COLUMN` ad-hoc. Usare un sistema di versioning dello schema.
 - [ ] **Token OAuth non viene refreshato proattivamente**: Il refresh token è salvato ma non c'è logica per gestire la scadenza dell'access token in modo trasparente.
+- [ ] **Preview cache senza eviction**: `previewCache` in `index.ts` è una `Map` in memoria senza limite di dimensione né TTL. Se l'utente apre molte preview senza arrivare all'ultimo chunk, la cache cresce indefinitamente.
 
 ### Frontend
 
@@ -101,8 +101,8 @@
 ## 📋 Refactoring e Qualità del Codice
 
 - [ ] **Aggiungere test unitari e di integrazione**: Attualmente zero test. Aggiungere almeno test per `db.ts`, `auth.ts`, e le API routes.
-- [ ] **Definire tipi TypeScript condivisi**: Creare un file `types.ts` condiviso tra backend e frontend per documenti, classificazioni, settings.
-- [ ] **Estrarre costanti e configurazioni**: Porte, URL, limiti, categorie sono hardcoded. Centralizzare in un file di configurazione.
+- [x] **Definire tipi TypeScript condivisi**: Completato: `src/shared/types.ts` contiene i tipi di dominio (`AppSettings`, `InboxFolder`, `DriveFileInfo`, `DocumentRecord`, ecc.) e lo schema RPC `ArkimindRPC` condiviso tra backend e frontend. Resta da tipizzare `classification` (attualmente `any`).
+- [ ] **Estrarre costanti e configurazioni**: Porte, URL, limiti, categorie sono hardcoded (es. `CHUNK_SIZE`, `maxRequestTime`, `DEV_SERVER_PORT`). Centralizzare in un file di configurazione.
 - [ ] **Aggiungere ESLint e Prettier**: Nessun linter configurato nel progetto.
 - [ ] **CI/CD pipeline**: Aggiungere GitHub Actions per build, test, e release automatica.
-- [ ] **Documentazione API**: Documentare le API REST con OpenAPI/Swagger.
+- [ ] **Documentazione RPC**: Documentare gli handler RPC disponibili, i parametri e le risposte. Lo schema tipizzato in `types.ts` è già una buona base, ma aggiungere JSDoc e un README per sviluppatori.
