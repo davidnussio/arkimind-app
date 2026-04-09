@@ -193,6 +193,8 @@ export type ArkimindRPC = {
   }>;
   webview: RPCSchema<{
     requests: {};
-    messages: {};
+    messages: {
+      shortcutAction: { action: string };
+    };
   }>;
 };

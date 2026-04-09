@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { onShortcutAction } from "@/lib/rpc";
 
 type Tab = "dashboard" | "documents" | "settings";
 
@@ -84,43 +85,32 @@ function App() {
     setLastSync(new Date());
   }, []);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts — native menu accelerators via RPC
+  useEffect(() => {
+    const unsubscribe = onShortcutAction((action) => {
+      switch (action) {
+        case "nav-dashboard": setActiveTab("dashboard"); break;
+        case "nav-documents": setActiveTab("documents"); break;
+        case "nav-settings": setActiveTab("settings"); break;
+        case "search": setActiveTab("documents"); break;
+        case "refresh": updateSyncTime(); break;
+        case "toggle-sidebar": setSidebarCollapsed((prev) => !prev); break;
+        case "show-shortcuts": setShowShortcuts((prev) => !prev); break;
+      }
+    });
+    return unsubscribe;
+  }, [updateSyncTime]);
+
+  // Escape key still handled locally (not a menu accelerator)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // ⌘1/2/3 for tab switching
-      if (e.metaKey && !e.shiftKey && !e.altKey) {
-        if (e.key === "1") { e.preventDefault(); setActiveTab("dashboard"); }
-        if (e.key === "2") { e.preventDefault(); setActiveTab("documents"); }
-        if (e.key === "3") { e.preventDefault(); setActiveTab("settings"); }
-      }
-      // ⌘R for refresh
-      if (e.metaKey && e.key === "r") {
-        e.preventDefault();
-        updateSyncTime();
-      }
-      // ⌘K for search (switch to documents and focus search)
-      if (e.metaKey && e.key === "k") {
-        e.preventDefault();
-        setActiveTab("documents");
-      }
-      // ⌘B for sidebar toggle
-      if (e.metaKey && e.key === "b") {
-        e.preventDefault();
-        setSidebarCollapsed((prev) => !prev);
-      }
-      // ⌘/ for shortcuts help
-      if (e.metaKey && e.key === "/") {
-        e.preventDefault();
-        setShowShortcuts((prev) => !prev);
-      }
-      // Escape to close shortcuts
       if (e.key === "Escape" && showShortcuts) {
         setShowShortcuts(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [updateSyncTime, showShortcuts]);
+  }, [showShortcuts]);
 
   const formatLastSync = () => {
     if (!lastSync) return null;

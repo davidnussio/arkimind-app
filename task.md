@@ -36,7 +36,7 @@
 - [ ] **Stato globale assente**: Ogni componente gestisce il proprio stato con `useState`. Usare un context o state manager leggero (Zustand, Jotai) per condividere auth status, settings, e notifiche.
 - [x] **Componente modale duplicato**: ~~Il codice del preview modal è copiato identico in `Dashboard.tsx` e `Documents.tsx`.~~ Completato: estratto componente riutilizzabile `PreviewModal` con gestione Escape e click su overlay, usato in entrambi i componenti.
 - [x] **Nessun sistema di notifiche globale**: ~~I messaggi di errore/successo sono gestiti localmente in ogni componente.~~ Completato: creato `Toaster.tsx` con `ToastProvider` e `useToast` hook. Toast globali con 4 livelli (success/error/warning/info), auto-dismiss, max 5 visibili. Integrato in Dashboard, Documents e Settings.
-- [ ] **`index.html` ha titolo generico**: Il titolo è "React + Tailwind + Vite" invece di "Arkimind".
+- [x] **`index.html` ha titolo generico**: ~~Il titolo è "React + Tailwind + Vite" invece di "Arkimind".~~ Completato: titolo già impostato a "Arkimind", lang="it" e favicon SVG presenti.
 - [x] **Nessun error boundary React**: ~~Se un componente crasha, l'intera app diventa bianca.~~ Completato: creato `ErrorBoundary.tsx` con UI di recovery (messaggio errore + pulsante "Riprova"), wrappato attorno all'intera app in `main.tsx`.
 - [x] **`CATEGORY_COLORS` duplicato**: ~~La mappa dei colori per categoria è copiata in `ClassificationResult.tsx` e `Documents.tsx`.~~ Completato: centralizzato in `src/mainview/lib/constants.ts` e importato in entrambi i componenti.
 

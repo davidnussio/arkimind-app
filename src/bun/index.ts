@@ -1,3 +1,4 @@
+import Electrobun from "electrobun/bun";
 import {
   ApplicationMenu,
   BrowserView,
@@ -11,7 +12,7 @@ import * as auth from "./auth";
 import * as drive from "./drive";
 import type { ArkimindRPC, ClassificationResult } from "../shared/types";
 
-// Application menu with standard Edit roles (enables Cmd+C/V/X)
+// Application menu with standard Edit roles + custom shortcuts
 ApplicationMenu.setApplicationMenu([
   {
     label: "Arkimind",
@@ -35,6 +36,20 @@ ApplicationMenu.setApplicationMenu([
       { role: "pasteAndMatchStyle" },
       { role: "delete" },
       { role: "selectAll" },
+    ],
+  },
+  {
+    label: "View",
+    submenu: [
+      { label: "Dashboard", action: "nav-dashboard", accelerator: "CmdOrCtrl+1" },
+      { label: "Documenti", action: "nav-documents", accelerator: "CmdOrCtrl+2" },
+      { label: "Impostazioni", action: "nav-settings", accelerator: "CmdOrCtrl+3" },
+      { type: "separator" },
+      { label: "Cerca documenti", action: "search", accelerator: "CmdOrCtrl+K" },
+      { label: "Aggiorna dati", action: "refresh", accelerator: "CmdOrCtrl+R" },
+      { type: "separator" },
+      { label: "Comprimi sidebar", action: "toggle-sidebar", accelerator: "CmdOrCtrl+B" },
+      { label: "Scorciatoie", action: "show-shortcuts", accelerator: "CmdOrCtrl+/" },
     ],
   },
 ]);
@@ -413,6 +428,14 @@ const mainWindow = new BrowserWindow({
   url,
   frame: { width: 1200, height: 800, x: 100, y: 100 },
   rpc,
+});
+
+// Forward menu shortcut actions to the webview
+Electrobun.events.on("application-menu-clicked", (e) => {
+  const action = e.data.action;
+  if (action) {
+    mainWindow.webview.rpc?.send.shortcutAction({ action });
+  }
 });
 
 console.log("Arkimind started!");
