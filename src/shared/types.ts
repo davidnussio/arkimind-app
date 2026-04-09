@@ -41,6 +41,8 @@ export interface DocumentProfile {
 }
 
 export interface FilingStrategy {
+  base_path?: string;
+  requires_year_folder?: boolean;
   full_suggested_path: string;
   suggested_filename: string;
 }
@@ -50,11 +52,25 @@ export interface FinancialData {
   currency?: string;
   is_paid?: boolean;
   is_invoice?: boolean;
+  handwritten_notes?: {
+    detected: boolean;
+    account_used?: string | null;
+    payment_date?: string | null;
+  };
 }
 
 export interface AiAnalysis {
   confidence_score: number;
   needs_human_validation: boolean;
+  reasoning: string;
+}
+
+export interface RecurrenceData {
+  is_recurring: boolean;
+  confidence: "high" | "medium" | "low";
+  frequency: "monthly" | "annual" | "quarterly" | "weekly" | "unknown" | null;
+  recurrence_type: "subscription" | "utility" | "rent" | "installment" | "maintenance" | "one_time" | "unknown";
+  signals: string[];
   reasoning: string;
 }
 
@@ -65,6 +81,7 @@ export interface ClassificationResult {
     financial?: FinancialData | false;
   };
   ai_analysis?: AiAnalysis;
+  ricorrenza?: RecurrenceData | false;
 }
 
 // --- Enriched file with classification ---
@@ -91,6 +108,7 @@ export interface DocumentRecord {
   document_type: string | null;
   document_date: string | null;
   is_tax_relevant: number;
+  is_recurring: number;
   archived_path: string | null;
   archived_filename: string | null;
   status: string;

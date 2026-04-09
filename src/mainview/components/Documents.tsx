@@ -28,6 +28,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Zap,
+  Repeat,
 } from "lucide-react";
 import { EmptyState } from "./EmptyState";
 import { useToast } from "./Toaster";
@@ -91,6 +92,7 @@ export function Documents() {
   const [filterCategory, setFilterCategory] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("");
   const [filterTaxRelevant, setFilterTaxRelevant] = useState<boolean | null>(null);
+  const [filterRecurring, setFilterRecurring] = useState<boolean | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -272,6 +274,7 @@ export function Documents() {
     if (filterCategory && doc.category !== filterCategory) return false;
     if (filterStatus && doc.status !== filterStatus) return false;
     if (filterTaxRelevant !== null && (doc.is_tax_relevant === 1) !== filterTaxRelevant) return false;
+    if (filterRecurring !== null && (doc.is_recurring === 1) !== filterRecurring) return false;
     return true;
   });
 
@@ -347,10 +350,11 @@ export function Documents() {
     setFilterCategory("");
     setFilterStatus("");
     setFilterTaxRelevant(null);
+    setFilterRecurring(null);
     setCurrentPage(1);
   };
 
-  const hasActiveFilters = filterCategory || filterStatus || filterTaxRelevant !== null;
+  const hasActiveFilters = filterCategory || filterStatus || filterTaxRelevant !== null || filterRecurring !== null;
 
   // Get unique categories from documents for filter dropdown
   const availableCategories = [...new Set(allDocuments.map((d) => d.category).filter(Boolean))].sort();
@@ -452,6 +456,22 @@ export function Documents() {
               <option value="no">No</option>
             </select>
           </div>
+          <div>
+            <label className="mb-1 block text-[10px] uppercase text-muted-foreground">Ricorrente</label>
+            <select
+              value={filterRecurring === null ? "" : filterRecurring ? "yes" : "no"}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFilterRecurring(v === "" ? null : v === "yes");
+                setCurrentPage(1);
+              }}
+              className="rounded-md border border-input bg-background px-2 py-1 text-xs outline-none focus:border-ring"
+            >
+              <option value="">Tutti</option>
+              <option value="yes">Sì</option>
+              <option value="no">No</option>
+            </select>
+          </div>
           {hasActiveFilters && (
             <button onClick={clearFilters} className="mt-4 text-xs text-muted-foreground underline hover:text-foreground">
               Rimuovi filtri
@@ -514,6 +534,9 @@ export function Documents() {
                       )}
                       {doc.is_tax_relevant === 1 && (
                         <span className="flex items-center gap-1 text-yellow-600"><Receipt className="size-3" />Imposte</span>
+                      )}
+                      {doc.is_recurring === 1 && (
+                        <span className="flex items-center gap-1 text-purple-600"><Repeat className="size-3" />Ricorrente</span>
                       )}
                     </div>
                     {doc.archived_path && (
@@ -674,6 +697,7 @@ function DocumentDetailDialog({ doc, onClose, onDelete, onReanalyze, onRearchive
   const filing = classification?.filing_strategy;
   const financial = classification?.extracted_data?.financial;
   const analysis = classification?.ai_analysis;
+  const ricorrenza = classification?.ricorrenza;
   const categoryColor = CATEGORY_COLORS[profile?.category ?? doc.category] ?? CATEGORY_COLORS.Altro;
 
   useEffect(() => {
@@ -795,6 +819,58 @@ function DocumentDetailDialog({ doc, onClose, onDelete, onReanalyze, onRearchive
                   <p className="rounded-md bg-yellow-50 px-3 py-2 text-xs text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400">Richiede validazione umana</p>
                 )}
                 <p className="text-xs text-muted-foreground">{analysis.reasoning}</p>
+              </div>
+            </section>
+          )}
+          {ricorrenza && ricorrenza !== false && (
+            <section>
+              <h4 className="mb-2 text-xs font-medium uppercase text-muted-foreground">Ricorrenza</h4>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Repeat className="size-3.5 text-muted-foreground" />
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                    ricorrenza.is_recurring
+                      ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
+                      : "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400"
+                  }`}>
+                    {ricorrenza.is_recurring ? "Ricorrente" : "Non ricorrente"}
+                  </span>
+                  {ricorrenza.confidence && (
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                      ricorrenza.confidence === "high"
+                        ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                        : ricorrenza.confidence === "medium"
+                          ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                          : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                    }`}>
+                      {ricorrenza.confidence}
+                    </span>
+                  )}
+                </div>
+                {ricorrenza.is_recurring && ricorrenza.frequency && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground">Frequenza:</span>
+                    <span className="font-medium capitalize">{ricorrenza.frequency}</span>
+                  </div>
+                )}
+                {ricorrenza.recurrence_type && ricorrenza.recurrence_type !== "unknown" && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground">Tipo:</span>
+                    <span className="font-medium capitalize">{ricorrenza.recurrence_type}</span>
+                  </div>
+                )}
+                {ricorrenza.signals && ricorrenza.signals.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {ricorrenza.signals.map((s: string, i: number) => (
+                      <span key={i} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {ricorrenza.reasoning && (
+                  <p className="text-xs text-muted-foreground">{ricorrenza.reasoning}</p>
+                )}
               </div>
             </section>
           )}

@@ -290,6 +290,10 @@ const rpc = BrowserView.defineRPC<ArkimindRPC>({
 
         const classification: ClassificationResult = await classifyRes.json();
 
+        // Extract ricorrenza status
+        const ricorrenza = classification.ricorrenza;
+        const isRecurring = ricorrenza && typeof ricorrenza === "object" ? ricorrenza.is_recurring : false;
+
         // Preserve archived status when re-classifying
         const existingDoc = db.getDocumentByFileId(fileId);
         const wasArchived = existingDoc?.status === "archived";
@@ -305,6 +309,7 @@ const rpc = BrowserView.defineRPC<ArkimindRPC>({
           documentDate: classification.document_profile?.document_date ?? "",
           isTaxRelevant:
             classification.document_profile?.is_tax_relevant ?? false,
+          isRecurring,
           status: wasArchived ? "archived" : "classified",
           inboxFolderId: fileMeta.parents?.[0],
           archivedPath: existingDoc?.archived_path ?? undefined,

@@ -67,6 +67,7 @@ function initSchema(db: Database) {
       document_type TEXT,
       document_date TEXT,
       is_tax_relevant INTEGER DEFAULT 0,
+      is_recurring INTEGER DEFAULT 0,
       archived_path TEXT,
       archived_filename TEXT,
       status TEXT DEFAULT 'pending',
@@ -107,6 +108,10 @@ function initSchema(db: Database) {
       sql: "ALTER TABLE documents ADD COLUMN is_tax_relevant INTEGER DEFAULT 0",
     },
     {
+      name: "is_recurring",
+      sql: "ALTER TABLE documents ADD COLUMN is_recurring INTEGER DEFAULT 0",
+    },
+    {
       name: "archived_path",
       sql: "ALTER TABLE documents ADD COLUMN archived_path TEXT",
     },
@@ -139,6 +144,7 @@ function initSchema(db: Database) {
   }
 
   db.exec("CREATE INDEX IF NOT EXISTS idx_docs_status ON documents(status)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_docs_recurring ON documents(is_recurring)");
 }
 
 // --- Auth ---
@@ -241,6 +247,7 @@ export function saveDocument(doc: {
   documentType: string;
   documentDate: string;
   isTaxRelevant: boolean;
+  isRecurring: boolean;
   status: string;
   inboxFolderId?: string;
   archivedPath?: string;
@@ -251,8 +258,8 @@ export function saveDocument(doc: {
       `INSERT INTO documents (
         drive_file_id, original_name, mime_type, classification_json,
         category, entity, document_type, document_date, is_tax_relevant,
-        status, inbox_folder_id, archived_path, archived_filename, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        is_recurring, status, inbox_folder_id, archived_path, archived_filename, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(drive_file_id) DO UPDATE SET
         classification_json = excluded.classification_json,
         category = excluded.category,
@@ -260,6 +267,7 @@ export function saveDocument(doc: {
         document_type = excluded.document_type,
         document_date = excluded.document_date,
         is_tax_relevant = excluded.is_tax_relevant,
+        is_recurring = excluded.is_recurring,
         status = excluded.status,
         archived_path = COALESCE(excluded.archived_path, archived_path),
         archived_filename = COALESCE(excluded.archived_filename, archived_filename),
@@ -275,6 +283,7 @@ export function saveDocument(doc: {
       doc.documentType,
       doc.documentDate,
       doc.isTaxRelevant ? 1 : 0,
+      doc.isRecurring ? 1 : 0,
       doc.status,
       doc.inboxFolderId ?? null,
       doc.archivedPath ?? null,

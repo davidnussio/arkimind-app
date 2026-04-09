@@ -14,6 +14,7 @@ import {
   Brain,
   Banknote,
   Pencil,
+  Repeat,
 } from "lucide-react";
 import { CATEGORY_COLORS } from "@/lib/constants";
 
@@ -38,6 +39,7 @@ export function ClassificationResult({
   const filing = classification.filing_strategy;
   const financial = classification.extracted_data?.financial;
   const analysis = classification.ai_analysis;
+  const ricorrenza = classification.ricorrenza;
 
   const categoryColor =
     CATEGORY_COLORS[profile?.category] ?? CATEGORY_COLORS.Altro;
@@ -194,6 +196,62 @@ export function ClassificationResult({
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">{analysis.reasoning}</p>
+              </div>
+            </section>
+          )}
+
+          {/* Ricorrenza */}
+          {ricorrenza && ricorrenza !== false && (
+            <section>
+              <h4 className="mb-2 text-xs font-medium uppercase text-muted-foreground">
+                Ricorrenza
+              </h4>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Repeat className="size-3.5 text-muted-foreground" />
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                    ricorrenza.is_recurring
+                      ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
+                      : "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400"
+                  }`}>
+                    {ricorrenza.is_recurring ? "Ricorrente" : "Non ricorrente"}
+                  </span>
+                  {ricorrenza.confidence && (
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                      ricorrenza.confidence === "high"
+                        ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                        : ricorrenza.confidence === "medium"
+                          ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                          : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                    }`}>
+                      {ricorrenza.confidence}
+                    </span>
+                  )}
+                </div>
+                {ricorrenza.is_recurring && ricorrenza.frequency && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground">Frequenza:</span>
+                    <span className="font-medium capitalize">{ricorrenza.frequency}</span>
+                  </div>
+                )}
+                {ricorrenza.recurrence_type && ricorrenza.recurrence_type !== "unknown" && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground">Tipo:</span>
+                    <span className="font-medium capitalize">{ricorrenza.recurrence_type}</span>
+                  </div>
+                )}
+                {ricorrenza.signals && ricorrenza.signals.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {ricorrenza.signals.map((s, i) => (
+                      <span key={i} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {ricorrenza.reasoning && (
+                  <p className="text-xs text-muted-foreground">{ricorrenza.reasoning}</p>
+                )}
               </div>
             </section>
           )}
