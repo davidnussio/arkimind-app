@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "./ui/button";
 import { api } from "@/lib/api";
 import { ClassificationResult } from "./ClassificationResult";
@@ -6,6 +6,7 @@ import { ClassificationEditor } from "./ClassificationEditor";
 import { ArchiveConfirmDialog } from "./ArchiveConfirmDialog";
 import { PreviewModal } from "./PreviewModal";
 import { UploadProgress, type UploadFileStatus } from "./UploadProgress";
+import { BatchOperationProgress, type BatchItemStatus } from "./BatchOperationProgress";
 import {
   FolderOpen,
   RefreshCw,
@@ -20,6 +21,8 @@ import {
   ChevronRight,
   Upload,
   Pencil,
+  Zap,
+  FolderInput,
 } from "lucide-react";
 import { EmptyState } from "./EmptyState";
 import { useToast } from "./Toaster";
@@ -92,6 +95,166 @@ export function Dashboard({ onSync }: DashboardProps) {
   } | null>(null);
   const [uploadFiles, setUploadFiles] = useState<UploadFileStatus[]>([]);
   const [showUploadProgress, setShowUploadProgress] = useState(false);
+
+  // Batch operations
+  const [batchItems, setBatchItems] = useState<BatchItemStatus[]>([]);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchTitle, setBatchTitle] = useState("");
+  const [showBatch, setShowBatch] = useState(false);
+  const batchCancelRef = useRef(false);
+
+  const runBatchClassify = async (folderId: string, files: DriveFile[]) => {
+    const unclassified = files.filter((f) => f.classificationStatus !== "classified" && f.classificationStatus !== "archived");
+    if (unclassified.length === 0) {
+      toast("Tutti i file sono già classificati", "info");
+      return;
+    }
+    batchCancelRef.current = false;
+    const items: BatchItemStatus[] = unclassified.map((f) => ({ id: f.id, name: f.name, status: "pending" }));
+    setBatchItems(items);
+    setBatchTitle("Classificazione batch");
+    setBatchRunning(true);
+    setShowBatch(true);
+
+    for (let i = 0; i < unclassified.length; i++) {
+      if (batchCancelRef.current) {
+        setBatchItems((prev) => prev.map((it, j) => j >= i && it.status === "pending" ? { ...it, status: "skipped" } : it));
+        break;
+      }
+      setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "running" } : it));
+      try {
+        const result = await api.classifyFile(unclassified[i].id);
+        if (result.success && result.classification) {
+          setFolderFiles((prev) => {
+            const updated = { ...prev };
+            for (const fId in updated) {
+              updated[fId] = updated[fId].map((f) =>
+                f.id === unclassified[i].id
+                  ? { ...f, classificationStatus: "classified", classification: result.classification }
+                  : f,
+              );
+            }
+            return updated;
+          });
+        }
+        setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "done" } : it));
+      } catch (e: unknown) {
+        setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "error", error: e instanceof Error ? e.message : "Errore" } : it));
+      }
+    }
+    setBatchRunning(false);
+  };
+
+  const runBatchArchive = async (folderId: string, files: DriveFile[]) => {
+    const archivable = files.filter((f) => f.classificationStatus === "classified" && f.classification?.filing_strategy?.full_suggested_path && f.classification?.filing_strategy?.suggested_filename);
+    if (archivable.length === 0) {
+      toast("Nessun file classificato da archiviare", "info");
+      return;
+    }
+    batchCancelRef.current = false;
+    const items: BatchItemStatus[] = archivable.map((f) => ({ id: f.id, name: f.name, status: "pending" }));
+    setBatchItems(items);
+    setBatchTitle("Archiviazione batch");
+    setBatchRunning(true);
+    setShowBatch(true);
+
+    for (let i = 0; i < archivable.length; i++) {
+      if (batchCancelRef.current) {
+        setBatchItems((prev) => prev.map((it, j) => j >= i && it.status === "pending" ? { ...it, status: "skipped" } : it));
+        break;
+      }
+      setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "running" } : it));
+      try {
+        const file = archivable[i];
+        const targetPath = file.classification!.filing_strategy.full_suggested_path;
+        const targetFilename = file.classification!.filing_strategy.suggested_filename;
+        await api.archiveFile(file.id, targetPath, targetFilename);
+        setFolderFiles((prev) => {
+          const updated = { ...prev };
+          updated[folderId] = (updated[folderId] ?? []).filter((f) => f.id !== file.id);
+          return updated;
+        });
+        setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "done" } : it));
+      } catch (e: unknown) {
+        setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "error", error: e instanceof Error ? e.message : "Errore" } : it));
+      }
+    }
+    setBatchRunning(false);
+  };
+
+  const runBatchClassifyAndArchive = async (folderId: string, files: DriveFile[]) => {
+    const pending = files.filter((f) => f.classificationStatus !== "archived");
+    if (pending.length === 0) {
+      toast("Tutti i file sono già archiviati", "info");
+      return;
+    }
+    batchCancelRef.current = false;
+    const items: BatchItemStatus[] = pending.map((f) => ({ id: f.id, name: f.name, status: "pending" }));
+    setBatchItems(items);
+    setBatchTitle("Classifica e archivia batch");
+    setBatchRunning(true);
+    setShowBatch(true);
+
+    for (let i = 0; i < pending.length; i++) {
+      if (batchCancelRef.current) {
+        setBatchItems((prev) => prev.map((it, j) => j >= i && it.status === "pending" ? { ...it, status: "skipped" } : it));
+        break;
+      }
+      setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "running" } : it));
+      const file = pending[i];
+      try {
+        // Step 1: classify if needed
+        let classification = file.classification;
+        if (file.classificationStatus !== "classified" || !classification?.filing_strategy?.full_suggested_path) {
+          const result = await api.classifyFile(file.id);
+          if (!result.success || !result.classification) {
+            setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "error", error: result.error ?? "Classificazione fallita" } : it));
+            continue;
+          }
+          classification = result.classification;
+          setFolderFiles((prev) => {
+            const updated = { ...prev };
+            for (const fId in updated) {
+              updated[fId] = updated[fId].map((f) =>
+                f.id === file.id ? { ...f, classificationStatus: "classified", classification } : f,
+              );
+            }
+            return updated;
+          });
+        }
+        if (batchCancelRef.current) {
+          setBatchItems((prev) => prev.map((it, j) => j >= i && it.status !== "done" && it.status !== "error" ? { ...it, status: "skipped" } : it));
+          break;
+        }
+        // Step 2: archive
+        const targetPath = classification.filing_strategy?.full_suggested_path;
+        const targetFilename = classification.filing_strategy?.suggested_filename;
+        if (!targetPath || !targetFilename) {
+          setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "error", error: "Dati archiviazione mancanti" } : it));
+          continue;
+        }
+        await api.archiveFile(file.id, targetPath, targetFilename);
+        setFolderFiles((prev) => {
+          const updated = { ...prev };
+          updated[folderId] = (updated[folderId] ?? []).filter((f) => f.id !== file.id);
+          return updated;
+        });
+        setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "done" } : it));
+      } catch (e: unknown) {
+        setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "error", error: e instanceof Error ? e.message : "Errore" } : it));
+      }
+    }
+    setBatchRunning(false);
+  };
+
+  const handleBatchStop = () => {
+    batchCancelRef.current = true;
+  };
+
+  const handleBatchClose = () => {
+    setShowBatch(false);
+    setBatchItems([]);
+  };
 
   const loadInboxFolders = useCallback(async () => {
     try {
@@ -384,6 +547,40 @@ export function Dashboard({ onSync }: DashboardProps) {
               )}
               <span className="text-xs">Carica</span>
             </Button>
+            {folderFiles[folder.driveFolderId] && folderFiles[folder.driveFolderId].length > 0 && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => runBatchClassify(folder.driveFolderId, folderFiles[folder.driveFolderId])}
+                  disabled={batchRunning}
+                  title="Classifica tutti i file non classificati"
+                >
+                  <Sparkles className="size-3.5" />
+                  <span className="text-xs">Analizza tutti</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => runBatchArchive(folder.driveFolderId, folderFiles[folder.driveFolderId])}
+                  disabled={batchRunning}
+                  title="Archivia tutti i file classificati"
+                >
+                  <Archive className="size-3.5" />
+                  <span className="text-xs">Archivia tutti</span>
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => runBatchClassifyAndArchive(folder.driveFolderId, folderFiles[folder.driveFolderId])}
+                  disabled={batchRunning}
+                  title="Classifica e archivia tutti i file"
+                >
+                  <Zap className="size-3.5" />
+                  <span className="text-xs">Classifica e archivia</span>
+                </Button>
+              </>
+            )}
           </div>
 
           {/* Files list */}
@@ -568,6 +765,17 @@ export function Dashboard({ onSync }: DashboardProps) {
 
       {/* Upload Progress */}
       <UploadProgress files={uploadFiles} visible={showUploadProgress} />
+
+      {/* Batch Operation Progress */}
+      {showBatch && (
+        <BatchOperationProgress
+          title={batchTitle}
+          items={batchItems}
+          onStop={handleBatchStop}
+          onClose={handleBatchClose}
+          running={batchRunning}
+        />
+      )}
     </div>
   );
 }

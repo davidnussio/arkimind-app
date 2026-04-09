@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "./ui/button";
 import { api } from "@/lib/api";
 import { CATEGORY_COLORS } from "@/lib/constants";
 import { PreviewModal } from "./PreviewModal";
+import { BatchOperationProgress, type BatchItemStatus } from "./BatchOperationProgress";
 import {
   Search,
   FileText,
@@ -26,6 +27,7 @@ import {
   Filter,
   ChevronLeft,
   ChevronRight,
+  Zap,
 } from "lucide-react";
 import { EmptyState } from "./EmptyState";
 import { useToast } from "./Toaster";
@@ -72,7 +74,7 @@ function shouldShowRearchive(doc: any): boolean {
 }
 
 export function Documents() {
-  const { toastError } = useToast();
+  const { toastError, toast } = useToast();
   const [allDocuments, setAllDocuments] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -92,6 +94,140 @@ export function Documents() {
   const [showFilters, setShowFilters] = useState(false);
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Batch operations
+  const [batchItems, setBatchItems] = useState<BatchItemStatus[]>([]);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchTitle, setBatchTitle] = useState("");
+  const [showBatch, setShowBatch] = useState(false);
+  const batchCancelRef = useRef(false);
+
+  const runBatchReanalyze = async () => {
+    const docs = filteredDocuments.filter((d) => d.status !== "pending" || d.classification_json);
+    if (docs.length === 0) {
+      toast("Nessun documento da ri-analizzare", "info");
+      return;
+    }
+    batchCancelRef.current = false;
+    const items: BatchItemStatus[] = docs.map((d) => ({ id: d.drive_file_id, name: d.original_name, status: "pending" as const }));
+    setBatchItems(items);
+    setBatchTitle("Ri-analisi batch");
+    setBatchRunning(true);
+    setShowBatch(true);
+
+    for (let i = 0; i < docs.length; i++) {
+      if (batchCancelRef.current) {
+        setBatchItems((prev) => prev.map((it, j) => j >= i && it.status === "pending" ? { ...it, status: "skipped" } : it));
+        break;
+      }
+      setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "running" } : it));
+      try {
+        await api.classifyFile(docs[i].drive_file_id);
+        setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "done" } : it));
+      } catch (e: unknown) {
+        setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "error", error: e instanceof Error ? e.message : "Errore" } : it));
+      }
+    }
+    setBatchRunning(false);
+    loadDocuments();
+  };
+
+  const runBatchRearchive = async () => {
+    const docs = filteredDocuments.filter((d) => shouldShowRearchive(d));
+    if (docs.length === 0) {
+      toast("Nessun documento da riarchiviare", "info");
+      return;
+    }
+    batchCancelRef.current = false;
+    const items: BatchItemStatus[] = docs.map((d) => ({ id: d.drive_file_id, name: d.original_name, status: "pending" as const }));
+    setBatchItems(items);
+    setBatchTitle("Riarchiviazione batch");
+    setBatchRunning(true);
+    setShowBatch(true);
+
+    for (let i = 0; i < docs.length; i++) {
+      if (batchCancelRef.current) {
+        setBatchItems((prev) => prev.map((it, j) => j >= i && it.status === "pending" ? { ...it, status: "skipped" } : it));
+        break;
+      }
+      setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "running" } : it));
+      try {
+        const classification = docs[i].classification_json ? JSON.parse(docs[i].classification_json) : null;
+        const filing = classification?.filing_strategy;
+        if (!filing?.full_suggested_path || !filing?.suggested_filename) {
+          setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "error", error: "Dati archiviazione mancanti" } : it));
+          continue;
+        }
+        await api.archiveFile(docs[i].drive_file_id, filing.full_suggested_path, filing.suggested_filename);
+        setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "done" } : it));
+      } catch (e: unknown) {
+        setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "error", error: e instanceof Error ? e.message : "Errore" } : it));
+      }
+    }
+    setBatchRunning(false);
+    loadDocuments();
+  };
+
+  const runBatchClassifyAndArchive = async () => {
+    const docs = filteredDocuments.filter((d) => d.status !== "archived");
+    if (docs.length === 0) {
+      toast("Tutti i documenti sono già archiviati", "info");
+      return;
+    }
+    batchCancelRef.current = false;
+    const items: BatchItemStatus[] = docs.map((d) => ({ id: d.drive_file_id, name: d.original_name, status: "pending" as const }));
+    setBatchItems(items);
+    setBatchTitle("Classifica e archivia batch");
+    setBatchRunning(true);
+    setShowBatch(true);
+
+    for (let i = 0; i < docs.length; i++) {
+      if (batchCancelRef.current) {
+        setBatchItems((prev) => prev.map((it, j) => j >= i && it.status === "pending" ? { ...it, status: "skipped" } : it));
+        break;
+      }
+      setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "running" } : it));
+      const doc = docs[i];
+      try {
+        // Step 1: classify if needed
+        let classification = doc.classification_json ? JSON.parse(doc.classification_json) : null;
+        if (doc.status === "pending" || !classification?.filing_strategy?.full_suggested_path) {
+          const result = await api.classifyFile(doc.drive_file_id);
+          if (!result.success || !result.classification) {
+            setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "error", error: result.error ?? "Classificazione fallita" } : it));
+            continue;
+          }
+          classification = result.classification;
+        }
+        if (batchCancelRef.current) {
+          setBatchItems((prev) => prev.map((it, j) => j >= i && it.status !== "done" && it.status !== "error" ? { ...it, status: "skipped" } : it));
+          break;
+        }
+        // Step 2: archive
+        const targetPath = classification.filing_strategy?.full_suggested_path;
+        const targetFilename = classification.filing_strategy?.suggested_filename;
+        if (!targetPath || !targetFilename) {
+          setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "error", error: "Dati archiviazione mancanti" } : it));
+          continue;
+        }
+        await api.archiveFile(doc.drive_file_id, targetPath, targetFilename);
+        setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "done" } : it));
+      } catch (e: unknown) {
+        setBatchItems((prev) => prev.map((it, j) => j === i ? { ...it, status: "error", error: e instanceof Error ? e.message : "Errore" } : it));
+      }
+    }
+    setBatchRunning(false);
+    loadDocuments();
+  };
+
+  const handleBatchStop = () => {
+    batchCancelRef.current = true;
+  };
+
+  const handleBatchClose = () => {
+    setShowBatch(false);
+    setBatchItems([]);
+  };
 
   const loadDocuments = useCallback(async () => {
     setLoading(true);
@@ -243,6 +379,33 @@ export function Documents() {
         >
           <Filter className="size-4" />
           {hasActiveFilters && <span className="size-1.5 rounded-full bg-primary" />}
+        </Button>
+        <Button
+          variant="outline"
+          size="default"
+          onClick={runBatchReanalyze}
+          disabled={batchRunning || filteredDocuments.length === 0}
+          title="Ri-analizza tutti i documenti filtrati"
+        >
+          <RefreshCw className="size-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="default"
+          onClick={runBatchRearchive}
+          disabled={batchRunning || filteredDocuments.length === 0}
+          title="Riarchivia tutti i documenti filtrati"
+        >
+          <FolderInput className="size-4" />
+        </Button>
+        <Button
+          variant="default"
+          size="default"
+          onClick={runBatchClassifyAndArchive}
+          disabled={batchRunning || filteredDocuments.length === 0}
+          title="Classifica e archivia tutti i documenti filtrati"
+        >
+          <Zap className="size-4" />
         </Button>
       </div>
 
@@ -431,6 +594,17 @@ export function Documents() {
 
       {/* Delete Confirmation Dialog */}
       {deleteTarget && <DeleteDialog target={deleteTarget} deleting={deleting} onDelete={handleDelete} onClose={() => !deleting && setDeleteTarget(null)} />}
+
+      {/* Batch Operation Progress */}
+      {showBatch && (
+        <BatchOperationProgress
+          title={batchTitle}
+          items={batchItems}
+          onStop={handleBatchStop}
+          onClose={handleBatchClose}
+          running={batchRunning}
+        />
+      )}
     </div>
   );
 }
