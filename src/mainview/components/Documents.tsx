@@ -28,6 +28,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { EmptyState } from "./EmptyState";
+import { useToast } from "./Toaster";
 
 const STATUS_LABELS: Record<string, { label: string; icon: typeof Archive }> = {
   pending: { label: "In attesa", icon: FileText },
@@ -71,6 +72,7 @@ function shouldShowRearchive(doc: any): boolean {
 }
 
 export function Documents() {
+  const { toastError } = useToast();
   const [allDocuments, setAllDocuments] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -97,7 +99,7 @@ export function Documents() {
       const docs = await api.getDocuments();
       setAllDocuments(docs);
     } catch (e) {
-      console.error("Failed to load documents:", e);
+      toastError(e);
     } finally {
       setLoading(false);
     }
@@ -121,7 +123,7 @@ export function Documents() {
         const results = await api.searchDocuments(query);
         setAllDocuments(results);
       } catch (e) {
-        console.error("Search failed:", e);
+        toastError(e);
       } finally {
         setLoading(false);
       }
@@ -153,7 +155,7 @@ export function Documents() {
       const result = await api.getFilePreview(doc.drive_file_id, mimeType);
       setPreviewData(result?.dataUrl ?? null);
     } catch (e) {
-      console.error("Preview failed:", e);
+      toastError(e);
     } finally {
       setPreviewLoading(false);
     }
@@ -170,7 +172,7 @@ export function Documents() {
       setAllDocuments((prev) => prev.filter((d) => d.drive_file_id !== driveFileId));
       setDeleteTarget(null);
     } catch (e) {
-      console.error("Delete failed:", e);
+      toastError(e);
     } finally {
       setDeleting(false);
     }
@@ -182,7 +184,7 @@ export function Documents() {
       const result = await api.classifyFile(doc.drive_file_id);
       if (result.success) loadDocuments();
     } catch (e) {
-      console.error("Re-analyze failed:", e);
+      toastError(e);
     } finally {
       setReanalyzingFiles((prev) => { const next = new Set(prev); next.delete(doc.drive_file_id); return next; });
     }
@@ -199,7 +201,7 @@ export function Documents() {
       const result = await api.archiveFile(doc.drive_file_id, filing.full_suggested_path, filing.suggested_filename);
       if (result.success) loadDocuments();
     } catch (e) {
-      console.error("Re-archive failed:", e);
+      toastError(e);
     } finally {
       setRearchivingFiles((prev) => { const next = new Set(prev); next.delete(doc.drive_file_id); return next; });
     }

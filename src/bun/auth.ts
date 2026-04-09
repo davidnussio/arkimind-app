@@ -13,6 +13,39 @@ export type { OAuth2Client } from "google-auth-library";
 
 const SCOPES = ["https://www.googleapis.com/auth/drive"];
 
+/** Try the preferred port, fall back to a random available one. */
+function findAvailablePort(preferred: number): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer();
+    server.listen(preferred, () => {
+      server.close(() => resolve(preferred));
+    });
+    server.on("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "EADDRINUSE") {
+        // Let the OS pick a random available port
+        const fallback = http.createServer();
+        fallback.listen(0, () => {
+          const addr = fallback.address();
+          const port = typeof addr === "object" && addr ? addr.port : 0;
+          fallback.close(() => {
+            if (port) {
+              console.warn(
+                `[auth] Port ${preferred} in use, using port ${port} instead`,
+              );
+              resolve(port);
+            } else {
+              reject(new Error("Could not find an available port"));
+            }
+          });
+        });
+        fallback.on("error", reject);
+      } else {
+        reject(err);
+      }
+    });
+  });
+}
+
 const ENV_CREDENTIAL_PATHS = [
   "ARKIMIND_CREDENTIALS_PATH",
   "GOOGLE_OAUTH_CREDENTIALS_PATH",
@@ -103,8 +136,10 @@ export async function login(): Promise<{ success: boolean; error?: string }> {
       return { success: false, error: "Invalid credentials.json format" };
     }
 
-    // Start local server to receive the OAuth callback
-    const redirectUri = "http://localhost:3000/oauth2callback";
+    // Start local server to receive the OAuth callback.
+    // Try port 3000 first, fall back to a random available port.
+    const port = await findAvailablePort(3000);
+    const redirectUri = `http://localhost:${port}/oauth2callback`;
     const oauth2Client = new OAuth2Client(
       key.client_id,
       key.client_secret,
@@ -120,7 +155,7 @@ export async function login(): Promise<{ success: boolean; error?: string }> {
     // Wait for the authorization code via local HTTP server
     const code = await new Promise<string>((resolve, reject) => {
       const server = http.createServer((req, res) => {
-        const url = new URL(req.url ?? "/", `http://localhost:3000`);
+        const url = new URL(req.url ?? "/", `http://localhost:${port}`);
         const authCode = url.searchParams.get("code");
         const error = url.searchParams.get("error");
 
@@ -137,9 +172,17 @@ export async function login(): Promise<{ success: boolean; error?: string }> {
           resolve(authCode);
         }
       });
-      server.listen(3000, () => {
+      server.listen(port, () => {
+        console.log(`[auth] OAuth callback server listening on port ${port}`);
         // Open the browser for consent
         import("open").then((mod) => mod.default(authorizeUrl));
+      });
+      server.on("error", (err: NodeJS.ErrnoException) => {
+        reject(
+          new Error(
+            `Impossibile avviare il server OAuth sulla porta ${port}: ${err.message}`,
+          ),
+        );
       });
     });
 

@@ -10,11 +10,10 @@ import {
   FolderPlus,
   Trash2,
   Loader2,
-  CheckCircle2,
-  XCircle,
 } from "lucide-react";
 import { FolderBrowser } from "./FolderBrowser";
 import { EmptyState } from "./EmptyState";
+import { useToast } from "./Toaster";
 
 interface InboxFolder {
   id: number;
@@ -30,6 +29,7 @@ interface Settings {
 }
 
 export function Settings() {
+  const { toast, toastError } = useToast();
   const [authenticated, setAuthenticated] = useState(false);
   const [settings, setSettings] = useState<Settings>({
     apiKey: null,
@@ -41,10 +41,6 @@ export function Settings() {
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [apiBaseUrlInput, setApiBaseUrlInput] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
-  const [message, setMessage] = useState<{
-    text: string;
-    type: "success" | "error";
-  } | null>(null);
   const [showFolderBrowser, setShowFolderBrowser] = useState<
     "inbox" | "archive" | null
   >(null);
@@ -62,18 +58,13 @@ export function Settings() {
       setApiBaseUrlInput(settingsData.apiBaseUrl ?? "");
       setInboxFolders(folders);
     } catch (e) {
-      console.error("Failed to load settings:", e);
+      toastError(e);
     }
-  }, []);
+  }, [toastError]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  const showMessage = (text: string, type: "success" | "error") => {
-    setMessage({ text, type });
-    setTimeout(() => setMessage(null), 3000);
-  };
 
   const handleLogin = async () => {
     setLoading("login");
@@ -81,12 +72,12 @@ export function Settings() {
       const result = await api.login();
       if (result.success) {
         setAuthenticated(true);
-        showMessage("Autenticazione completata!", "success");
+        toast("Autenticazione completata!", "success");
       } else {
-        showMessage(result.error ?? "Login fallito", "error");
+        toast(result.error ?? "Login fallito", "error");
       }
-    } catch (e: any) {
-      showMessage(e.message, "error");
+    } catch (e: unknown) {
+      toastError(e);
     } finally {
       setLoading(null);
     }
@@ -95,14 +86,14 @@ export function Settings() {
   const handleLogout = async () => {
     await api.logout();
     setAuthenticated(false);
-    showMessage("Disconnesso", "success");
+    toast("Disconnesso", "success");
   };
 
   const handleSaveApiKey = async () => {
     if (!apiKeyInput.trim()) return;
     await api.saveSetting("api_key", apiKeyInput.trim());
     setSettings((s) => ({ ...s, apiKey: apiKeyInput.trim() }));
-    showMessage("API Key salvata", "success");
+    toast("API Key salvata", "success");
   };
 
   const handleSaveBaseUrl = async () => {
@@ -111,7 +102,7 @@ export function Settings() {
     const url = apiBaseUrlInput.trim().replace(/\/+$/, "");
     await api.saveSetting("api_base_url", url);
     setSettings((s) => ({ ...s, apiBaseUrl: url }));
-    showMessage("URL API salvato", "success");
+    toast("URL API salvato", "success");
   };
 
   const handleFolderSelected = async (
@@ -120,7 +111,7 @@ export function Settings() {
   ) => {
     if (showFolderBrowser === "inbox") {
       await api.addInboxFolder(folderId, folderName);
-      showMessage(`Cartella "${folderName}" aggiunta`, "success");
+      toast(`Cartella "${folderName}" aggiunta`, "success");
       loadData();
     } else if (showFolderBrowser === "archive") {
       await api.saveSetting("archive_root_folder_id", folderId);
@@ -130,7 +121,7 @@ export function Settings() {
         archiveRootFolderId: folderId,
         archiveRootFolderName: folderName,
       }));
-      showMessage(`Cartella archivio impostata: "${folderName}"`, "success");
+      toast(`Cartella archivio impostata: "${folderName}"`, "success");
     }
     setShowFolderBrowser(null);
   };
@@ -138,30 +129,12 @@ export function Settings() {
   const handleRemoveInboxFolder = async (folder: InboxFolder) => {
     await api.removeInboxFolder(folder.id);
     setInboxFolders((prev) => prev.filter((f) => f.id !== folder.id));
-    showMessage(`Cartella "${folder.name}" rimossa`, "success");
+    toast(`Cartella "${folder.name}" rimossa`, "success");
   };
 
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold">Impostazioni</h2>
-
-      {/* Status message */}
-      {message && (
-        <div
-          className={`flex items-center gap-2 rounded-lg p-3 text-sm ${
-            message.type === "success"
-              ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400"
-              : "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400"
-          }`}
-        >
-          {message.type === "success" ? (
-            <CheckCircle2 className="size-4" />
-          ) : (
-            <XCircle className="size-4" />
-          )}
-          {message.text}
-        </div>
-      )}
 
       {/* Google Account */}
       <section className="rounded-lg border border-border p-4">

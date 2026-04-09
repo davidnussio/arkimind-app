@@ -1,11 +1,19 @@
 /**
  * Google Drive service — file listing, download, move, folder operations.
+ * All API calls use retry with exponential backoff for transient errors.
  */
 import { google, type drive_v3 } from "googleapis";
 import { Readable } from "node:stream";
 import { getAuthClient, type OAuth2Client } from "./auth";
+import { withRetry } from "./retry";
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
+
+/** Max file size for preview download: 50 MB */
+const MAX_PREVIEW_SIZE = 50 * 1024 * 1024;
+
+/** Max file size for upload via base64 RPC: 100 MB */
+export const MAX_UPLOAD_SIZE = 100 * 1024 * 1024;
 
 export interface DriveFile {
   id: string;
@@ -30,14 +38,16 @@ export async function listFiles(folderId: string): Promise<DriveFile[]> {
   let pageToken: string | undefined;
 
   do {
-    const res = await drive.files.list({
-      q: `'${folderId}' in parents and trashed = false`,
-      fields:
-        "nextPageToken, files(id, name, mimeType, modifiedTime, size, thumbnailLink, parents)",
-      pageSize: 100,
-      pageToken,
-      orderBy: "modifiedTime desc",
-    });
+    const res = await withRetry(() =>
+      drive.files.list({
+        q: `'${folderId}' in parents and trashed = false`,
+        fields:
+          "nextPageToken, files(id, name, mimeType, modifiedTime, size, thumbnailLink, parents)",
+        pageSize: 100,
+        pageToken,
+        orderBy: "modifiedTime desc",
+      }),
+    );
     if (res.data.files) files.push(...res.data.files);
     pageToken = res.data.nextPageToken ?? undefined;
   } while (pageToken);
@@ -62,12 +72,14 @@ export async function listFolders(
     ? `'${parentId}' in parents and`
     : "";
 
-  const res = await drive.files.list({
-    q: `${parentClause} mimeType = '${FOLDER_MIME}' and trashed = false`,
-    fields: "files(id, name, mimeType, parents)",
-    pageSize: 100,
-    orderBy: "name",
-  });
+  const res = await withRetry(() =>
+    drive.files.list({
+      q: `${parentClause} mimeType = '${FOLDER_MIME}' and trashed = false`,
+      fields: "files(id, name, mimeType, parents)",
+      pageSize: 100,
+      orderBy: "name",
+    }),
+  );
 
   return (res.data.files ?? []).map((f) => ({
     id: f.id ?? "",
@@ -80,9 +92,11 @@ export async function listFolders(
 /** Download file content as bytes. */
 export async function downloadFile(fileId: string): Promise<Uint8Array> {
   const drive = getDriveClient();
-  const res = await drive.files.get(
-    { fileId, alt: "media" },
-    { responseType: "arraybuffer" },
+  const res = await withRetry(() =>
+    drive.files.get(
+      { fileId, alt: "media" },
+      { responseType: "arraybuffer" },
+    ),
   );
   return new Uint8Array(res.data as ArrayBuffer);
 }
@@ -90,10 +104,12 @@ export async function downloadFile(fileId: string): Promise<Uint8Array> {
 /** Get file metadata. */
 export async function getFileMetadata(fileId: string): Promise<DriveFile> {
   const drive = getDriveClient();
-  const res = await drive.files.get({
-    fileId,
-    fields: "id, name, mimeType, modifiedTime, size, thumbnailLink, parents",
-  });
+  const res = await withRetry(() =>
+    drive.files.get({
+      fileId,
+      fields: "id, name, mimeType, modifiedTime, size, thumbnailLink, parents",
+    }),
+  );
   return {
     id: res.data.id ?? fileId,
     name: res.data.name ?? "Unnamed",
@@ -112,11 +128,13 @@ export async function findFolder(
 ): Promise<DriveFile | null> {
   const drive = getDriveClient();
   const parentClause = parentId ? ` and '${parentId}' in parents` : "";
-  const res = await drive.files.list({
-    q: `name = '${name}' and mimeType = '${FOLDER_MIME}' and trashed = false${parentClause}`,
-    fields: "files(id, name, mimeType, parents)",
-    pageSize: 1,
-  });
+  const res = await withRetry(() =>
+    drive.files.list({
+      q: `name = '${name}' and mimeType = '${FOLDER_MIME}' and trashed = false${parentClause}`,
+      fields: "files(id, name, mimeType, parents)",
+      pageSize: 1,
+    }),
+  );
   const f = res.data.files?.[0];
   if (!f) return null;
   return {
@@ -133,10 +151,12 @@ export async function createFolder(
   parentId: string,
 ): Promise<DriveFile> {
   const drive = getDriveClient();
-  const res = await drive.files.create({
-    requestBody: { name, mimeType: FOLDER_MIME, parents: [parentId] },
-    fields: "id, name, mimeType, parents",
-  });
+  const res = await withRetry(() =>
+    drive.files.create({
+      requestBody: { name, mimeType: FOLDER_MIME, parents: [parentId] },
+      fields: "id, name, mimeType, parents",
+    }),
+  );
   return {
     id: res.data.id ?? "",
     name: res.data.name ?? name,
@@ -179,13 +199,15 @@ export async function moveFile(
   newName: string,
 ): Promise<void> {
   const drive = getDriveClient();
-  await drive.files.update({
-    fileId,
-    addParents: newParentId,
-    removeParents: currentParentId,
-    requestBody: { name: newName },
-    fields: "id, name, parents",
-  });
+  await withRetry(() =>
+    drive.files.update({
+      fileId,
+      addParents: newParentId,
+      removeParents: currentParentId,
+      requestBody: { name: newName },
+      fields: "id, name, parents",
+    }),
+  );
 }
 
 /** Upload a file to a Drive folder. */
@@ -195,19 +217,28 @@ export async function uploadFile(
   mimeType: string,
   data: Uint8Array,
 ): Promise<DriveFile> {
-  const drive = getDriveClient();
+  if (data.byteLength > MAX_UPLOAD_SIZE) {
+    const sizeMB = (data.byteLength / (1024 * 1024)).toFixed(1);
+    const limitMB = (MAX_UPLOAD_SIZE / (1024 * 1024)).toFixed(0);
+    throw new Error(
+      `Il file è troppo grande (${sizeMB} MB). Limite massimo: ${limitMB} MB.`,
+    );
+  }
 
-  const res = await drive.files.create({
-    requestBody: {
-      name: fileName,
-      parents: [folderId],
-    },
-    media: {
-      mimeType,
-      body: Readable.from(Buffer.from(data)),
-    },
-    fields: "id, name, mimeType, modifiedTime, size, parents",
-  });
+  const drive = getDriveClient();
+  const res = await withRetry(() =>
+    drive.files.create({
+      requestBody: {
+        name: fileName,
+        parents: [folderId],
+      },
+      media: {
+        mimeType,
+        body: Readable.from(Buffer.from(data)),
+      },
+      fields: "id, name, mimeType, modifiedTime, size, parents",
+    }),
+  );
 
   return {
     id: res.data.id ?? "",
@@ -222,7 +253,7 @@ export async function uploadFile(
 /** Permanently delete a file from Google Drive. */
 export async function deleteFile(fileId: string): Promise<void> {
   const drive = getDriveClient();
-  await drive.files.delete({ fileId });
+  await withRetry(() => drive.files.delete({ fileId }));
 }
 
 /** Get a file's thumbnail or content as a base64 data URL. */
@@ -231,12 +262,25 @@ export async function getFilePreview(
   mimeType: string,
 ): Promise<string | null> {
   try {
+    // Check file size before downloading
+    const meta = await getFileMetadata(fileId);
+    const fileSize = meta.size ? parseInt(meta.size, 10) : 0;
+
+    if (fileSize > MAX_PREVIEW_SIZE) {
+      const sizeMB = (fileSize / (1024 * 1024)).toFixed(1);
+      throw new Error(
+        `File troppo grande per l'anteprima (${sizeMB} MB). Limite: ${(MAX_PREVIEW_SIZE / (1024 * 1024)).toFixed(0)} MB.`,
+      );
+    }
+
     // For Google Docs/Sheets/etc, export as PDF
     if (mimeType.startsWith("application/vnd.google-apps.")) {
       const drive = getDriveClient();
-      const res = await drive.files.export(
-        { fileId, mimeType: "application/pdf" },
-        { responseType: "arraybuffer" },
+      const res = await withRetry(() =>
+        drive.files.export(
+          { fileId, mimeType: "application/pdf" },
+          { responseType: "arraybuffer" },
+        ),
       );
       const bytes = new Uint8Array(res.data as ArrayBuffer);
       const b64 = Buffer.from(bytes).toString("base64");
@@ -249,6 +293,10 @@ export async function getFilePreview(
     return `data:${mimeType};base64,${b64}`;
   } catch (e) {
     console.error("Preview failed:", e);
+    // Re-throw size errors so the frontend can show them
+    if (e instanceof Error && e.message.includes("troppo grande")) {
+      throw e;
+    }
     return null;
   }
 }

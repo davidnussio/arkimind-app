@@ -18,11 +18,11 @@ import {
   Archive,
   ChevronDown,
   ChevronRight,
-  AlertCircle,
   Upload,
   Pencil,
 } from "lucide-react";
 import { EmptyState } from "./EmptyState";
+import { useToast } from "./Toaster";
 
 interface InboxFolder {
   id: number;
@@ -68,6 +68,7 @@ function formatDate(iso?: string): string {
 }
 
 export function Dashboard({ onSync }: DashboardProps) {
+  const { toastError, toast } = useToast();
   const [inboxFolders, setInboxFolders] = useState<InboxFolder[]>([]);
   const [folderFiles, setFolderFiles] = useState<Record<string, DriveFile[]>>({});
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
@@ -80,7 +81,6 @@ export function Dashboard({ onSync }: DashboardProps) {
   const [selectedClassification, setSelectedClassification] = useState<{
     fileId: string; data: any; fileName: string; parentFolderId: string;
   } | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [uploadingFolders, setUploadingFolders] = useState<Set<string>>(new Set());
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   // New states for UX improvements
@@ -102,8 +102,8 @@ export function Dashboard({ onSync }: DashboardProps) {
       for (const folder of folders) {
         loadFolderFiles(folder.driveFolderId);
       }
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      toastError(e);
     }
   }, []);
 
@@ -116,8 +116,8 @@ export function Dashboard({ onSync }: DashboardProps) {
     try {
       const files = await api.listFiles(folderId);
       setFolderFiles((prev) => ({ ...prev, [folderId]: files }));
-    } catch (e: any) {
-      console.error("Failed to load files:", e);
+    } catch (e: unknown) {
+      toastError(e);
     } finally {
       setLoadingFolders((prev) => {
         const next = new Set(prev);
@@ -148,7 +148,7 @@ export function Dashboard({ onSync }: DashboardProps) {
       const result = await api.getFilePreview(file.id, file.mimeType);
       setPreviewData(result?.dataUrl ?? null);
     } catch (e) {
-      console.error("Preview failed:", e);
+      toastError(e);
     } finally {
       setPreviewLoading(false);
     }
@@ -177,8 +177,8 @@ export function Dashboard({ onSync }: DashboardProps) {
           parentFolderId,
         });
       }
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      toastError(e);
     } finally {
       setClassifyingFiles((prev) => {
         const next = new Set(prev);
@@ -199,7 +199,7 @@ export function Dashboard({ onSync }: DashboardProps) {
       const targetPath = classification.filing_strategy?.full_suggested_path ?? "";
       const targetFilename = classification.filing_strategy?.suggested_filename ?? "";
       if (!targetPath || !targetFilename) {
-        setError("Dati di archiviazione mancanti nella classificazione");
+        toastError(new Error("Dati di archiviazione mancanti nella classificazione"));
         return;
       }
       await api.archiveFile(fileId, targetPath, targetFilename);
@@ -210,8 +210,8 @@ export function Dashboard({ onSync }: DashboardProps) {
       });
       setSelectedClassification(null);
       setArchiveConfirm(null);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      toastError(e);
     } finally {
       setArchivingFiles((prev) => {
         const next = new Set(prev);
@@ -234,8 +234,8 @@ export function Dashboard({ onSync }: DashboardProps) {
       try {
         await api.uploadFile(folderId, files[i]);
         setUploadFiles((prev) => prev.map((s, j) => j === i ? { ...s, status: "done" } : s));
-      } catch (e: any) {
-        setUploadFiles((prev) => prev.map((s, j) => j === i ? { ...s, status: "error", error: e.message } : s));
+      } catch (e: unknown) {
+        setUploadFiles((prev) => prev.map((s, j) => j === i ? { ...s, status: "error", error: e instanceof Error ? e.message : "Errore" } : s));
       }
     }
 
@@ -255,8 +255,8 @@ export function Dashboard({ onSync }: DashboardProps) {
       if (result.uploaded.length > 0) {
         await loadFolderFiles(folderId);
       }
-    } catch (e: any) {
-      setError(`Upload fallito: ${e.message}`);
+    } catch (e: unknown) {
+      toastError(e);
     } finally {
       setUploadingFolders((prev) => {
         const next = new Set(prev);
@@ -334,14 +334,6 @@ export function Dashboard({ onSync }: DashboardProps) {
           Aggiorna
         </Button>
       </div>
-
-      {error && (
-        <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
-          <AlertCircle className="size-4 shrink-0" />
-          {error}
-          <button onClick={() => setError(null)} className="ml-auto text-xs underline">Chiudi</button>
-        </div>
-      )}
 
       {/* Inbox folders */}
       {inboxFolders.map((folder) => (

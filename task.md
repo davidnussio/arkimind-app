@@ -4,7 +4,6 @@
 
 ### Sicurezza
 
-- [x] **Migrare da HTTP server locale a Electrobun RPC**: ~~L'intera comunicazione frontend↔backend passava da un `Bun.serve()` su `localhost:3457`.~~ Completato: la comunicazione ora usa il canale RPC tipizzato nativo di Electrobun (`BrowserView.defineRPC` / `Electroview.defineRPC`). Tipi definiti in `src/shared/types.ts`, handler in `src/bun/index.ts`, client in `src/mainview/lib/rpc.ts`. Eliminati: server HTTP esposto, CORS, latenza HTTP.
 - [ ] **SQL Injection nelle query Drive API**: In `drive.ts`, i parametri `folderId`, `name`, `parentId` vengono interpolati direttamente nelle query string di Google Drive (`q: \`'${folderId}' in parents\``). Un folderId malevolo potrebbe manipolare la query. Usare escape o validazione degli ID.
 - [ ] **API Key visibile in memoria**: L'API key per il servizio di classificazione è salvata in chiaro nel DB SQLite. Considerare l'uso del Keychain di sistema (macOS) o cifratura.
 - [ ] **Nessuna validazione input nelle RPC `saveSetting`**: La chiave e il valore passati a `saveSetting` non vengono validati. Aggiungere una whitelist di chiavi ammesse e sanitizzare il valore.
@@ -12,14 +11,14 @@
 
 ### Errori e Robustezza
 
-- [ ] **Nessun retry su errori Google Drive API**: Chiamate a Google Drive possono fallire per rate limiting (429) o errori transitori (5xx). Implementare retry con backoff esponenziale.
-- [ ] **Errori RPC non gestiti nel frontend**: Le chiamate RPC possono lanciare eccezioni ma molti componenti le catturano solo con `console.error` senza mostrare feedback all'utente.
-- [ ] **Preview di file grandi carica tutto in memoria**: `getFilePreview` scarica l'intero file e lo converte in base64. Per file da centinaia di MB questo causa crash. Limitare la dimensione o usare streaming/thumbnail.
-- [ ] **Upload senza limite di dimensione**: Nessun controllo sulla dimensione dei file caricati. L'upload via RPC (`uploadFileData`) converte l'intero file in base64 in memoria — per file grandi questo è problematico.
+- [x] **Nessun retry su errori Google Drive API**: ~~Chiamate a Google Drive possono fallire per rate limiting (429) o errori transitori (5xx).~~ Completato: implementato `withRetry` con backoff esponenziale in `src/bun/retry.ts`, applicato a tutte le chiamate Drive API in `drive.ts`.
+- [x] **Errori RPC non gestiti nel frontend**: ~~Le chiamate RPC possono lanciare eccezioni ma molti componenti le catturano solo con `console.error` senza mostrare feedback all'utente.~~ Completato: creato sistema toast globale (`Toaster.tsx` con `useToast` hook) e sostituiti tutti i `console.error` con `toastError()` in Dashboard, Documents e Settings.
+- [x] **Preview di file grandi carica tutto in memoria**: ~~`getFilePreview` scarica l'intero file e lo converte in base64. Per file da centinaia di MB questo causa crash.~~ Completato: aggiunto controllo dimensione file (limite 50 MB) prima del download in `drive.ts`, con errore user-friendly propagato al frontend.
+- [x] **Upload senza limite di dimensione**: ~~Nessun controllo sulla dimensione dei file caricati. L'upload via RPC (`uploadFileData`) converte l'intero file in base64 in memoria — per file grandi questo è problematico.~~ Completato: aggiunto limite 100 MB con validazione sia in `drive.ts` (`uploadFile`) che nel handler RPC `uploadFileData` in `index.ts`.
 - [x] **`parseInt` senza validazione**: ~~In `DELETE /api/inbox-folders/:id`, `parseInt` poteva restituire `NaN`.~~ Risolto: con RPC tipizzato il parametro `id` è già tipizzato come `number` nello schema.
-- [ ] **Server OAuth callback su porta fissa 3000**: Basso rischio (usata solo per pochi secondi durante il login). Eventualmente gestire il caso di porta occupata con un messaggio chiaro.
+- [x] **Server OAuth callback su porta fissa 3000**: ~~Basso rischio (usata solo per pochi secondi durante il login).~~ Completato: aggiunta funzione `findAvailablePort` in `auth.ts` che prova la porta 3000 e, se occupata, usa una porta disponibile assegnata dal sistema.
 - [x] **Nessun timeout sulle chiamate fetch del frontend**: ~~Le richieste API potevano restare appese indefinitamente.~~ Risolto: Electrobun RPC ha `maxRequestTime: 120_000` configurato sia lato bun che webview.
-- [ ] **`any` type usato in alcuni punti**: I tipi principali sono definiti in `src/shared/types.ts`, ma `classification` è ancora `any`. Definire un'interfaccia TypeScript per la risposta di classificazione.
+- [x] **`any` type usato in alcuni punti**: ~~I tipi principali sono definiti in `src/shared/types.ts`, ma `classification` è ancora `any`.~~ Completato: definite interfacce `ClassificationResult`, `DocumentProfile`, `FilingStrategy`, `FinancialData`, `AiAnalysis` in `types.ts`. Tipizzato `EnrichedDriveFile.classification` e lo schema RPC `classifyFile`. Aggiunta cache preview con eviction (TTL 5min, max 20 entries).
 
 ## 🟡 Problemi di Design e Architettura
 
@@ -30,15 +29,15 @@
 - [ ] **Database non chiuso alla chiusura dell'app**: `_db` non viene mai chiuso con `close()`. Aggiungere cleanup su shutdown.
 - [ ] **Nessuna migrazione versionata del DB**: Le migrazioni sono fatte con `ALTER TABLE ADD COLUMN` ad-hoc. Usare un sistema di versioning dello schema.
 - [ ] **Token OAuth non viene refreshato proattivamente**: Il refresh token è salvato ma non c'è logica per gestire la scadenza dell'access token in modo trasparente.
-- [ ] **Preview cache senza eviction**: `previewCache` in `index.ts` è una `Map` in memoria senza limite di dimensione né TTL. Se l'utente apre molte preview senza arrivare all'ultimo chunk, la cache cresce indefinitamente.
+- [x] **Preview cache senza eviction**: ~~`previewCache` in `index.ts` è una `Map` in memoria senza limite di dimensione né TTL.~~ Completato: aggiunto TTL di 5 minuti e limite massimo di 20 entries con eviction automatica in `index.ts`.
 
 ### Frontend
 
 - [ ] **Stato globale assente**: Ogni componente gestisce il proprio stato con `useState`. Usare un context o state manager leggero (Zustand, Jotai) per condividere auth status, settings, e notifiche.
 - [x] **Componente modale duplicato**: ~~Il codice del preview modal è copiato identico in `Dashboard.tsx` e `Documents.tsx`.~~ Completato: estratto componente riutilizzabile `PreviewModal` con gestione Escape e click su overlay, usato in entrambi i componenti.
-- [ ] **Nessun sistema di notifiche globale**: I messaggi di errore/successo sono gestiti localmente in ogni componente. Creare un toast/notification system centralizzato.
+- [x] **Nessun sistema di notifiche globale**: ~~I messaggi di errore/successo sono gestiti localmente in ogni componente.~~ Completato: creato `Toaster.tsx` con `ToastProvider` e `useToast` hook. Toast globali con 4 livelli (success/error/warning/info), auto-dismiss, max 5 visibili. Integrato in Dashboard, Documents e Settings.
 - [ ] **`index.html` ha titolo generico**: Il titolo è "React + Tailwind + Vite" invece di "Arkimind".
-- [ ] **Nessun error boundary React**: Se un componente crasha, l'intera app diventa bianca. Aggiungere `ErrorBoundary`.
+- [x] **Nessun error boundary React**: ~~Se un componente crasha, l'intera app diventa bianca.~~ Completato: creato `ErrorBoundary.tsx` con UI di recovery (messaggio errore + pulsante "Riprova"), wrappato attorno all'intera app in `main.tsx`.
 - [x] **`CATEGORY_COLORS` duplicato**: ~~La mappa dei colori per categoria è copiata in `ClassificationResult.tsx` e `Documents.tsx`.~~ Completato: centralizzato in `src/mainview/lib/constants.ts` e importato in entrambi i componenti.
 
 ## 🟢 Miglioramenti UI/UX

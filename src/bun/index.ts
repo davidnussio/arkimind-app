@@ -9,7 +9,7 @@ import * as path from "node:path";
 import * as db from "./db";
 import * as auth from "./auth";
 import * as drive from "./drive";
-import type { ArkimindRPC } from "../shared/types";
+import type { ArkimindRPC, ClassificationResult } from "../shared/types";
 
 // Application menu with standard Edit roles (enables Cmd+C/V/X)
 ApplicationMenu.setApplicationMenu([
@@ -46,9 +46,35 @@ const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 db.getDb();
 console.log("Database initialized");
 
-// Preview chunk cache: fileId -> { mimeType, chunks[] }
+// Preview chunk cache: fileId -> { mimeType, chunks[], createdAt }
 const CHUNK_SIZE = 256 * 1024; // 256KB base64 per chunk (~192KB raw)
-const previewCache = new Map<string, { mimeType: string; chunks: string[] }>();
+const MAX_CACHE_ENTRIES = 20;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+interface CacheEntry {
+  mimeType: string;
+  chunks: string[];
+  createdAt: number;
+}
+
+const previewCache = new Map<string, CacheEntry>();
+
+/** Evict expired or excess entries from the preview cache. */
+function evictPreviewCache() {
+  const now = Date.now();
+  // Remove expired entries
+  for (const [key, entry] of previewCache) {
+    if (now - entry.createdAt > CACHE_TTL_MS) {
+      previewCache.delete(key);
+    }
+  }
+  // If still over limit, remove oldest entries
+  while (previewCache.size > MAX_CACHE_ENTRIES) {
+    const oldestKey = previewCache.keys().next().value;
+    if (oldestKey) previewCache.delete(oldestKey);
+    else break;
+  }
+}
 
 // --- RPC Handlers ---
 const rpc = BrowserView.defineRPC<ArkimindRPC>({
@@ -142,7 +168,8 @@ const rpc = BrowserView.defineRPC<ArkimindRPC>({
             chunks.push(base64.slice(i, i + CHUNK_SIZE));
           }
 
-          previewCache.set(fileId, { mimeType: actualMime, chunks });
+          previewCache.set(fileId, { mimeType: actualMime, chunks, createdAt: Date.now() });
+          evictPreviewCache();
 
           return { mimeType: actualMime, totalChunks: chunks.length };
         } catch (e) {
@@ -199,6 +226,13 @@ const rpc = BrowserView.defineRPC<ArkimindRPC>({
         const bytes = new Uint8Array(
           Buffer.from(dataBase64, "base64"),
         );
+        if (bytes.byteLength > drive.MAX_UPLOAD_SIZE) {
+          const sizeMB = (bytes.byteLength / (1024 * 1024)).toFixed(1);
+          const limitMB = (drive.MAX_UPLOAD_SIZE / (1024 * 1024)).toFixed(0);
+          throw new Error(
+            `Il file è troppo grande (${sizeMB} MB). Limite massimo: ${limitMB} MB.`,
+          );
+        }
         const driveFile = await drive.uploadFile(
           folderId,
           fileName,
@@ -239,7 +273,7 @@ const rpc = BrowserView.defineRPC<ArkimindRPC>({
           );
         }
 
-        const classification = await classifyRes.json();
+        const classification: ClassificationResult = await classifyRes.json();
 
         // Preserve archived status when re-classifying
         const existingDoc = db.getDocumentByFileId(fileId);

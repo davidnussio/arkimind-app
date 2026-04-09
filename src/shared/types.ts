@@ -29,9 +29,49 @@ export interface DriveFileInfo {
   parents?: string[];
 }
 
+// --- Classification types ---
+
+export interface DocumentProfile {
+  category: string;
+  entity: string;
+  document_type: string;
+  document_date: string;
+  is_tax_relevant: boolean;
+  tax_notes?: string;
+}
+
+export interface FilingStrategy {
+  full_suggested_path: string;
+  suggested_filename: string;
+}
+
+export interface FinancialData {
+  amount?: number;
+  currency?: string;
+  is_paid?: boolean;
+  is_invoice?: boolean;
+}
+
+export interface AiAnalysis {
+  confidence_score: number;
+  needs_human_validation: boolean;
+  reasoning: string;
+}
+
+export interface ClassificationResult {
+  document_profile: DocumentProfile;
+  filing_strategy: FilingStrategy;
+  extracted_data?: {
+    financial?: FinancialData | false;
+  };
+  ai_analysis?: AiAnalysis;
+}
+
+// --- Enriched file with classification ---
+
 export interface EnrichedDriveFile extends DriveFileInfo {
   classificationStatus: string | null;
-  classification: any | null;
+  classification: ClassificationResult | null;
 }
 
 export interface BrowsedFolder {
@@ -122,7 +162,7 @@ export type ArkimindRPC = {
       // Classification & Archive
       classifyFile: {
         params: { fileId: string };
-        response: { success: boolean; classification?: any; error?: string };
+        response: { success: boolean; classification?: ClassificationResult; error?: string };
       };
       archiveFile: {
         params: { fileId: string; targetPath: string; targetFilename: string };
