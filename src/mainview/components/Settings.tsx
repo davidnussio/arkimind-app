@@ -21,17 +21,17 @@ interface InboxFolder {
   name: string;
 }
 
-interface Settings {
+interface SettingsData {
   apiKey: string | null;
   apiBaseUrl: string | null;
   archiveRootFolderId: string | null;
   archiveRootFolderName: string | null;
 }
 
-export function Settings() {
+export function Settings({ onAuthChange }: { onAuthChange?: () => void }) {
   const { toast, toastError } = useToast();
   const [authenticated, setAuthenticated] = useState(false);
-  const [settings, setSettings] = useState<Settings>({
+  const [settings, setSettings] = useState<SettingsData>({
     apiKey: null,
     apiBaseUrl: null,
     archiveRootFolderId: null,
@@ -72,6 +72,7 @@ export function Settings() {
       const result = await api.login();
       if (result.success) {
         setAuthenticated(true);
+        onAuthChange?.();
         toast("Autenticazione completata!", "success");
       } else {
         toast(result.error ?? "Login fallito", "error");
@@ -86,6 +87,7 @@ export function Settings() {
   const handleLogout = async () => {
     await api.logout();
     setAuthenticated(false);
+    onAuthChange?.();
     toast("Disconnesso", "success");
   };
 

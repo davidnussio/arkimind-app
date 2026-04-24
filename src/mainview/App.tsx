@@ -80,6 +80,14 @@ function App() {
       .catch(() => setAuthenticated(false));
   }, [activeTab]);
 
+  // Allow child components to refresh auth state
+  const refreshAuth = useCallback(() => {
+    api
+      .getAuthStatus()
+      .then((r) => setAuthenticated(r.authenticated))
+      .catch(() => setAuthenticated(false));
+  }, []);
+
   // Track last sync time
   const updateSyncTime = useCallback(() => {
     setLastSync(new Date());
@@ -263,7 +271,7 @@ function App() {
         <div className="animate-in fade-in duration-200">
           {activeTab === "dashboard" && <Dashboard onSync={updateSyncTime} />}
           {activeTab === "documents" && <Documents />}
-          {activeTab === "settings" && <Settings />}
+          {activeTab === "settings" && <Settings onAuthChange={refreshAuth} />}
         </div>
       </main>
 

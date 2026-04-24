@@ -139,7 +139,10 @@ export async function login(): Promise<{ success: boolean; error?: string }> {
     // Start local server to receive the OAuth callback.
     // Try port 3000 first, fall back to a random available port.
     const port = await findAvailablePort(3000);
-    const redirectUri = `http://localhost:${port}/oauth2callback`;
+    // Use bare http://localhost:<port> as redirect URI — must match what's
+    // registered in credentials.json (Google allows any port for "installed" apps
+    // but the path component must match exactly).
+    const redirectUri = `http://localhost:${port}`;
     const oauth2Client = new OAuth2Client(
       key.client_id,
       key.client_secret,
@@ -150,6 +153,7 @@ export async function login(): Promise<{ success: boolean; error?: string }> {
       access_type: "offline",
       scope: SCOPES,
       prompt: "consent",
+      include_granted_scopes: true,
     });
 
     // Wait for the authorization code via local HTTP server
@@ -160,14 +164,14 @@ export async function login(): Promise<{ success: boolean; error?: string }> {
         const error = url.searchParams.get("error");
 
         if (error) {
-          res.end("Authentication denied.");
+          res.end("Autenticazione negata.");
           server.close();
           reject(new Error(`OAuth error: ${error}`));
           return;
         }
 
         if (authCode) {
-          res.end("Authentication successful! You can close this tab.");
+          res.end("Autenticazione completata! Puoi chiudere questa scheda.");
           server.close();
           resolve(authCode);
         }
@@ -186,10 +190,18 @@ export async function login(): Promise<{ success: boolean; error?: string }> {
       });
     });
 
+    console.log("[auth] Exchanging authorization code for tokens...");
     const { tokens } = await oauth2Client.getToken(code);
+    console.log("[auth] Token exchange complete. refresh_token present:", !!tokens.refresh_token);
 
     if (!tokens.refresh_token) {
-      return { success: false, error: "No refresh token received" };
+      return {
+        success: false,
+        error:
+          "Google non ha restituito il refresh token. " +
+          "Vai su https://myaccount.google.com/permissions, " +
+          "rimuovi l'accesso per Arkimind e riprova.",
+      };
     }
 
     // Save to database
@@ -200,9 +212,12 @@ export async function login(): Promise<{ success: boolean; error?: string }> {
       refresh_token: tokens.refresh_token,
     });
 
+    console.log("[auth] Credentials saved successfully");
     return { success: true };
   } catch (e) {
-    return { success: false, error: `Authentication failed: ${e}` };
+    console.error("[auth] Login failed:", e);
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, error: `Autenticazione fallita: ${msg}` };
   }
 }
 

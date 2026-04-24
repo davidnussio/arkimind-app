@@ -46,9 +46,9 @@
 
 - [x] **Nessun onboarding / wizard iniziale**: ~~L'utente deve sapere già cosa fare.~~ Completato: creato componente `OnboardingWizard` con 6 step (welcome, auth, api, archive, inbox, done) che guida l'utente nella configurazione iniziale.
 - [x] **Nessuna conferma prima dell'archiviazione**: ~~Il click su "Archivia" sposta immediatamente il file.~~ Completato: creato `ArchiveConfirmDialog` che mostra anteprima del percorso di destinazione prima di procedere.
-- [x] **Impossibile modificare la classificazione prima dell'archiviazione**: ~~L'utente non può correggere categoria, ente, data o percorso suggerito dall'AI.~~ Completato: creato `ClassificationEditor` con form per modificare categoria, ente, tipo, data, percorso e nome file. Pulsante "Modifica" aggiunto in `ClassificationResult` e nella lista file della Dashboard.
+- [x] **Impossibile modificare la classificazione prima dell'archiviazione**: ~~L'utente non può correggere categoria, ente, data o percorso suggerito dall'AI.~~ Completato: creato `ClassificationEditor` con form per modificare categoria, ente, tipo, data, percorso, nome file e dati ricorrenza (toggle ricorrente, frequenza, tipo). Pulsante "Modifica" aggiunto in `ClassificationResult` e nella lista file della Dashboard.
 - [x] **Nessun feedback di progresso per upload multipli**: ~~L'upload di più file mostra solo uno spinner generico.~~ Completato: creato componente `UploadProgress` con progress bar globale e stato per-file (pending/uploading/done/error).
-- [x] **Ricerca documenti solo testuale**: ~~La ricerca è un semplice `LIKE`.~~ Completato: aggiunto pannello filtri avanzati in `Documents` con dropdown per categoria, stato e rilevanza fiscale, applicati lato client sui risultati.
+- [x] **Ricerca documenti solo testuale**: ~~La ricerca è un semplice `LIKE`.~~ Completato: aggiunto pannello filtri avanzati in `Documents` con dropdown per categoria, stato, rilevanza fiscale e ricorrenza, applicati lato client sui risultati.
 - [x] **Nessuna paginazione**: ~~I documenti sono caricati tutti (limit 100).~~ Completato: aggiunta paginazione client-side con 20 documenti per pagina e navigazione prev/next.
 - [x] **Nessun dark mode toggle**: ~~I CSS supportano dark mode ma non c'è modo di attivarlo dall'UI.~~ Completato: aggiunto toggle dark/light mode nella sidebar con persistenza in localStorage e rispetto della preferenza di sistema come default.
 - [x] **Nessuna scorciatoia da tastiera**: ~~Mancano shortcut per azioni comuni.~~ Completato: aggiunte scorciatoie ⌘1/2/3 (tab), ⌘K (cerca), ⌘R (refresh), ⌘B (sidebar), ⌘/ (help scorciatoie), Esc (chiudi modali). Dialog help accessibile dalla sidebar.
@@ -63,12 +63,16 @@
 - [x] **Nessun favicon / icona app**: ~~Manca il favicon nell'HTML e l'icona dell'applicazione desktop.~~ Completato: aggiunto favicon SVG inline con logo Arkimind, titolo HTML corretto a "Arkimind", lang impostato a "it".
 - [x] **Font di sistema di default**: ~~Non è specificato un font personalizzato.~~ Completato: aggiunto font Inter da Google Fonts come font di default nell'app.
 
+### Integrazione API
+
+- [x] **Supporto riconoscimento fatture ricorrenti (ricorrenza)**: ~~L'API di classificazione restituisce dati sulla ricorrenza dei pagamenti ma il client non li gestiva.~~ Completato: aggiunta interfaccia `RecurrenceData` in `types.ts` con campi `is_recurring`, `confidence`, `frequency`, `recurrence_type`, `signals`, `reasoning`. Aggiunta colonna `is_recurring` nel DB con migrazione automatica e indice. Backend (`index.ts`) estrae e salva il flag ricorrenza dalla risposta API. UI: sezione "Ricorrenza" in `ClassificationResult` e `DocumentDetailDialog` con badge, confidenza, frequenza, tipo, segnali e reasoning. Filtro "Ricorrente" nel pannello filtri avanzati di `Documents`. Campi editabili in `ClassificationEditor` (toggle, frequenza, tipo ricorrenza).
+
 ## 🔵 Funzionalità Mancanti per Competitività
 
 ### Essenziali (Must-Have)
 
-- [ ] **Classificazione batch**: Possibilità di classificare tutti i file di una cartella con un click, non uno alla volta.
-- [ ] **Archiviazione batch**: Archiviare tutti i file classificati in una volta.
+- [x] **Classificazione batch**: ~~Possibilità di classificare tutti i file di una cartella con un click, non uno alla volta.~~ Completato: aggiunto pulsante "Analizza tutti" per cartella nella Dashboard e "Ri-analizza batch" nella vista Documenti. Creato componente `BatchOperationProgress` con progress per-file, stato (pending/running/done/error/skipped) e possibilità di annullare l'operazione.
+- [x] **Archiviazione batch**: ~~Archiviare tutti i file classificati in una volta.~~ Completato: aggiunto pulsante "Archivia tutti" nella Dashboard e "Riarchivia batch" nei Documenti. Aggiunta anche operazione combinata "Classifica e archivia" (⚡) che esegue classificazione + archiviazione in sequenza per ogni file.
 - [ ] **Ricerca full-text nel contenuto dei documenti**: Attualmente si cerca solo nei metadati. Implementare OCR + indicizzazione del testo estratto.
 - [ ] **Supporto multi-cloud**: Oltre a Google Drive, supportare OneDrive, Dropbox, iCloud, S3.
 - [ ] **Notifiche push / monitoraggio automatico**: Rilevare automaticamente nuovi file nelle cartelle inbox e notificare l'utente.
@@ -100,7 +104,7 @@
 ## 📋 Refactoring e Qualità del Codice
 
 - [ ] **Aggiungere test unitari e di integrazione**: Attualmente zero test. Aggiungere almeno test per `db.ts`, `auth.ts`, e le API routes.
-- [x] **Definire tipi TypeScript condivisi**: Completato: `src/shared/types.ts` contiene i tipi di dominio (`AppSettings`, `InboxFolder`, `DriveFileInfo`, `DocumentRecord`, ecc.) e lo schema RPC `ArkimindRPC` condiviso tra backend e frontend. Resta da tipizzare `classification` (attualmente `any`).
+- [x] **Definire tipi TypeScript condivisi**: Completato: `src/shared/types.ts` contiene i tipi di dominio (`AppSettings`, `InboxFolder`, `DriveFileInfo`, `DocumentRecord`, ecc.) e lo schema RPC `ArkimindRPC` condiviso tra backend e frontend. Aggiunta interfaccia `RecurrenceData` per il supporto ricorrenza. Tipizzato `ClassificationResult` con `ricorrenza?: RecurrenceData | false`.
 - [ ] **Estrarre costanti e configurazioni**: Porte, URL, limiti, categorie sono hardcoded (es. `CHUNK_SIZE`, `maxRequestTime`, `DEV_SERVER_PORT`). Centralizzare in un file di configurazione.
 - [ ] **Aggiungere ESLint e Prettier**: Nessun linter configurato nel progetto.
 - [ ] **CI/CD pipeline**: Aggiungere GitHub Actions per build, test, e release automatica.
