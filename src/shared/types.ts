@@ -2,7 +2,7 @@
  * Shared RPC type definitions for Electrobun typed RPC
  * between Bun (main process) and Webview (renderer).
  */
-import type { RPCSchema } from "electrobun/bun";
+import type { RPCSchema } from "electrobun/main/rpc";
 
 // --- Domain types ---
 

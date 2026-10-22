@@ -15,8 +15,15 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
+    // Electrobun 2.x SDK is projected into .hutch/devkit by `electrobun prepare`.
+    // Not using `extends: ./.hutch/devkit/tsconfig.json` because it sets baseUrl,
+    // which TypeScript 7 rejects.
     "paths": {
-      "@/*": ["./src/mainview/*"]
+      "@/*": ["./src/mainview/*"],
+      "electrobun": ["./.hutch/devkit/api/sdks/main/index.ts"],
+      "electrobun/main": ["./.hutch/devkit/api/sdks/main/index.ts"],
+      "electrobun/main/rpc": ["./.hutch/devkit/api/sdks/main/entries/rpc.ts"],
+      "electrobun/view": ["./.hutch/devkit/api/browser/index.ts"]
     }
   },
   "include": ["src/mainview", "src/shared"],

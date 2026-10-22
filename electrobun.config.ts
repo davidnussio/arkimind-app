@@ -7,6 +7,11 @@ export default {
     version: "0.1.0",
   },
   build: {
+    // Main process uses bun:sqlite and Bun.file, so it needs the real Bun runtime
+    mainProcess: "bun",
+    bun: {
+      entrypoint: "src/bun/index.ts",
+    },
     // Vite builds to dist/, we copy from there
     copy: {
       "dist/index.html": "views/mainview/index.html",

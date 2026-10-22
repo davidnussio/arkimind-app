@@ -65,6 +65,11 @@ bun run build:canary
 bun run build:stable
 ```
 
+Electrobun 2.x ships its SDK through the Hutch devkit rather than `node_modules`. `electrobun prepare`
+(run by the scripts before Vite, and implicitly by `electrobun dev`/`build`) downloads the paired
+Hutch/Electrobun release into `~/.hutch` on first use and projects the SDK into `.hutch/devkit/`
+(generated and gitignored). Vite and `tsconfig.json` resolve `electrobun/*` imports from there.
+
 ## How HMR Works
 
 When you run `bun run dev:hmr`:

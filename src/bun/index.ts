@@ -1,11 +1,11 @@
-import Electrobun from "electrobun/bun";
+import Electrobun from "electrobun/main";
 import {
   ApplicationMenu,
   BrowserView,
   BrowserWindow,
   Updater,
   Utils,
-} from "electrobun/bun";
+} from "electrobun/main";
 import * as path from "node:path";
 import * as db from "./db";
 import * as auth from "./auth";
