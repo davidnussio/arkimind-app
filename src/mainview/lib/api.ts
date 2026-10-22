@@ -53,10 +53,14 @@ export const api = {
 
   // --- Upload ---
   uploadFile: async (folderId: string, file: File) => {
-    const buffer = await file.arrayBuffer();
-    const dataBase64 = btoa(
-      String.fromCharCode(...new Uint8Array(buffer)),
-    );
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    // Spreading the whole file into fromCharCode overflows the call stack on
+    // anything bigger than a few hundred KB, so convert in chunks.
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
+    const dataBase64 = btoa(binary);
     return rpc().uploadFileData({
       folderId,
       fileName: file.name,

@@ -41,15 +41,15 @@ ApplicationMenu.setApplicationMenu([
   {
     label: "View",
     submenu: [
-      { label: "Dashboard", action: "nav-dashboard", accelerator: "CmdOrCtrl+1" },
-      { label: "Documenti", action: "nav-documents", accelerator: "CmdOrCtrl+2" },
+      { label: "Da archiviare", action: "nav-dashboard", accelerator: "CmdOrCtrl+1" },
+      { label: "Archivio", action: "nav-documents", accelerator: "CmdOrCtrl+2" },
       { label: "Impostazioni", action: "nav-settings", accelerator: "CmdOrCtrl+3" },
       { type: "separator" },
-      { label: "Cerca documenti", action: "search", accelerator: "CmdOrCtrl+K" },
-      { label: "Aggiorna dati", action: "refresh", accelerator: "CmdOrCtrl+R" },
+      { label: "Cerca nell'archivio", action: "search", accelerator: "CmdOrCtrl+K" },
+      { label: "Aggiorna", action: "refresh", accelerator: "CmdOrCtrl+R" },
       { type: "separator" },
-      { label: "Comprimi sidebar", action: "toggle-sidebar", accelerator: "CmdOrCtrl+B" },
-      { label: "Scorciatoie", action: "show-shortcuts", accelerator: "CmdOrCtrl+/" },
+      { label: "Mostra/nascondi barra laterale", action: "toggle-sidebar", accelerator: "CmdOrCtrl+B" },
+      { label: "Scorciatoie da tastiera", action: "show-shortcuts", accelerator: "CmdOrCtrl+/" },
     ],
   },
 ]);

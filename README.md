@@ -84,6 +84,18 @@ When you run `bun run dev` (without HMR):
 1. Electrobun starts and loads from `views://mainview/index.html`
 2. You need to rebuild (`bun run build`) to see changes
 
+## Previewing the UI Without Electrobun
+
+```bash
+bun run preview:mock
+```
+
+Serves the webview on `http://localhost:5174` with an in-memory mock of the Bun RPC API
+(`src/mainview/dev/`, wired in only by `vite.preview.config.ts`, never by the app build). Every
+screen works without a Google account. Pick a state with `?scenario=default|onboarding|signedout|empty|errors|crash`
+and add `&slow=1` to see loading states. Menu shortcuts can be triggered from the console with
+`__arkimindShortcut("refresh")`.
+
 ## Project Structure
 
 ```

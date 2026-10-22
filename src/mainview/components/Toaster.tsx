@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback, createContext, useContext, type ReactNode } from "react";
+import { useState, useCallback, useMemo, createContext, useContext, type ReactNode } from "react";
 import { CheckCircle2, XCircle, AlertTriangle, Info, X } from "lucide-react";
+import { errorMessage } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 type ToastType = "success" | "error" | "warning" | "info";
 
@@ -25,26 +27,19 @@ const ICONS: Record<ToastType, typeof CheckCircle2> = {
   info: Info,
 };
 
-const STYLES: Record<ToastType, string> = {
-  success: "bg-green-50 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800",
-  error: "bg-red-50 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800",
-  warning: "bg-yellow-50 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800",
-  info: "bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800",
+const ICON_COLORS: Record<ToastType, string> = {
+  success: "text-success",
+  error: "text-destructive",
+  warning: "text-warning",
+  info: "text-info",
 };
 
 const DURATIONS: Record<ToastType, number> = {
-  success: 3000,
-  error: 6000,
+  success: 3500,
+  error: 7000,
   warning: 5000,
   info: 4000,
 };
-
-/** Extract a user-friendly message from an error. */
-function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return "Si è verificato un errore imprevisto";
-}
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -53,34 +48,39 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const toast = useCallback((message: string, type: ToastType = "info") => {
-    const id = nextId++;
-    setToasts((prev) => [...prev.slice(-4), { id, message, type }]); // max 5 toasts
-    setTimeout(() => removeToast(id), DURATIONS[type]);
-  }, [removeToast]);
+  const toast = useCallback(
+    (message: string, type: ToastType = "info") => {
+      const id = nextId++;
+      setToasts((prev) => [...prev.slice(-3), { id, message, type }]);
+      setTimeout(() => removeToast(id), DURATIONS[type]);
+    },
+    [removeToast],
+  );
 
-  const toastError = useCallback((error: unknown) => {
-    toast(extractErrorMessage(error), "error");
-  }, [toast]);
+  const toastError = useCallback((error: unknown) => toast(errorMessage(error), "error"), [toast]);
+
+  const value = useMemo(() => ({ toast, toastError }), [toast, toastError]);
 
   return (
-    <ToastContext.Provider value={{ toast, toastError }}>
+    <ToastContext.Provider value={value}>
       {children}
-      {/* Toast container */}
-      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2" aria-live="polite">
+      <div
+        className="pointer-events-none fixed inset-x-0 bottom-5 z-[100] flex flex-col items-center gap-2 px-4"
+        aria-live="polite"
+      >
         {toasts.map((t) => {
           const Icon = ICONS[t.type];
           return (
             <div
               key={t.id}
-              className={`flex items-start gap-2 rounded-lg border px-4 py-3 shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-200 max-w-sm ${STYLES[t.type]}`}
-              role="alert"
+              role={t.type === "error" ? "alert" : "status"}
+              className="pointer-events-auto flex w-full max-w-md items-start gap-3 rounded-xl border bg-popover py-3 pr-3 pl-4 text-sm text-popover-foreground shadow-lg animate-in fade-in-0 slide-in-from-bottom-2 duration-200"
             >
-              <Icon className="mt-0.5 size-4 shrink-0" />
-              <p className="flex-1 text-sm">{t.message}</p>
+              <Icon className={cn("mt-px size-4 shrink-0", ICON_COLORS[t.type])} />
+              <p className="min-w-0 flex-1 break-words">{t.message}</p>
               <button
                 onClick={() => removeToast(t.id)}
-                className="shrink-0 rounded p-0.5 opacity-60 hover:opacity-100"
+                className="-my-0.5 shrink-0 rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                 aria-label="Chiudi notifica"
               >
                 <X className="size-3.5" />
