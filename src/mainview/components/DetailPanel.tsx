@@ -1,15 +1,29 @@
 import { useState, type ReactNode } from "react";
-import { AlertTriangle, ArrowDown, ChevronRight, FileText, Folder, Loader2, Pencil, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowDown,
+  Check,
+  ChevronRight,
+  FileText,
+  Folder,
+  Loader2,
+  Pencil,
+  Sparkles,
+  UserCheck,
+} from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "./ui/sheet";
 import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
 import { Callout, Skeleton } from "./ui/misc";
-import { Input, Label } from "./ui/input";
 import { FileIcon, ReviewBadge, StatusBadge } from "./badges";
 import { ClassificationDetails, Section } from "./ClassificationDetails";
+import { ClassificationForm } from "./ClassificationForm";
 import { EmptyState } from "./EmptyState";
 import type { ClassificationResult } from "../../shared/types";
 import { confidenceOf, destinationOf, needsReview, pathSegments, type Destination } from "@/lib/documents";
 import { formatPercent } from "@/lib/format";
+
+const FORM_ID = "classification-form";
 
 function Spinner({ className }: { className?: string }) {
   return <Loader2 className={`${className ?? ""} animate-spin`} />;
@@ -60,7 +74,7 @@ function DestinationBox({
 interface DetailPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Identity of the file shown; resets the destination draft when it changes. */
+  /** Identity of the file shown; leaving edit mode when it changes. */
   fileId: string;
   name: string;
   mimeType?: string | null;
@@ -69,16 +83,18 @@ interface DetailPanelProps {
   classification: ClassificationResult | null;
   /** Where the document currently lives in the archive, if archived. */
   currentLocation?: Destination | null;
-  /** Lets the user correct the suggested destination before archiving. */
-  editableDestination?: boolean;
   analyzing?: boolean;
   onAnalyze?: () => void;
+  /** Saves a corrected classification; resolves to false when it failed (the caller reports why). */
+  onSave?: (classification: ClassificationResult) => Promise<boolean>;
+  /** Actions for the file, given the destination the AI (or the user) proposes. */
   footer: (destination: Destination | null) => ReactNode;
 }
 
 /**
  * Side panel with everything known about one file: what the AI understood,
- * where it will be (or is) archived, and the actions for it.
+ * where it will be (or is) archived, and the actions for it. With `onSave`
+ * the classification can be corrected and confirmed.
  */
 export function DetailPanel({
   open,
@@ -90,35 +106,41 @@ export function DetailPanel({
   status,
   classification,
   currentLocation,
-  editableDestination,
   analyzing,
   onAnalyze,
+  onSave,
   footer,
 }: DetailPanelProps) {
-  const suggested = destinationOf(classification);
-  const draftKey = `${fileId}|${suggested?.path}|${suggested?.filename}`;
-  const [draft, setDraft] = useState<{ key: string; value: Destination | null; editing: boolean }>({
-    key: draftKey,
-    value: suggested,
-    editing: false,
-  });
-  // Reset the draft when another file or a new classification is shown.
-  if (draft.key !== draftKey) setDraft({ key: draftKey, value: suggested, editing: false });
+  const [editingFile, setEditingFile] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const editing = editingFile === fileId && classification !== null;
 
-  const destination =
-    draft.value && draft.value.path.trim() && draft.value.filename.trim()
-      ? { path: draft.value.path.trim(), filename: draft.value.filename.trim() }
-      : null;
+  const suggested = destinationOf(classification);
   const extension = /\.[^.]+$/.exec(name)?.[0];
   const review = needsReview(classification);
   const score = confidenceOf(classification);
-  const edited =
-    destination && suggested && (destination.path !== suggested.path || destination.filename !== suggested.filename);
   const showSuggestion =
     suggested &&
     (!currentLocation ||
       currentLocation.path.replace(/\/+$/, "") !== suggested.path ||
       currentLocation.filename.replace(/\.[^.]+$/, "") !== suggested.filename.replace(/\.[^.]+$/, ""));
+
+  const save = async (updated: ClassificationResult) => {
+    if (!onSave) return;
+    setSaving(true);
+    try {
+      if (await onSave(updated)) setEditingFile(null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const editButton = onSave && classification && !editing && (
+    <Button variant="ghost" size="xs" onClick={() => setEditingFile(fileId)}>
+      <Pencil />
+      Modifica
+    </Button>
+  );
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -137,6 +159,12 @@ export function DetailPanel({
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <StatusBadge status={status} />
               {review && <ReviewBadge />}
+              {classification?.user_verified && (
+                <Badge tone="success">
+                  <UserCheck />
+                  Verificato da te
+                </Badge>
+              )}
             </div>
             {meta.length > 0 && (
               <SheetDescription className="mt-2 text-xs text-muted-foreground">{meta.join(" · ")}</SheetDescription>
@@ -169,111 +197,93 @@ export function DetailPanel({
                 }
               />
             )
+          ) : editing ? (
+            <>
+              <Callout tone="neutral" icon={Pencil}>
+                Correggi ciò che l'AI ha sbagliato. Le modifiche vengono salvate in Arkimind e usate per
+                l'archiviazione; una nuova analisi le sostituisce.
+              </Callout>
+              <ClassificationForm
+                key={fileId}
+                id={FORM_ID}
+                classification={classification}
+                onSubmit={save}
+              />
+            </>
           ) : (
             <>
               {review && (
-                <Callout tone="warning" icon={AlertTriangle} title="Da verificare">
+                <Callout
+                  tone="warning"
+                  icon={AlertTriangle}
+                  title="Da verificare"
+                  action={
+                    onSave && (
+                      <div className="flex flex-col gap-1.5">
+                        <Button size="sm" variant="outline" onClick={() => setEditingFile(fileId)}>
+                          <Pencil />
+                          Correggi
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={saving}
+                          onClick={() => save({ ...classification, user_verified: true })}
+                        >
+                          {saving ? <Loader2 className="animate-spin" /> : <Check />}
+                          Va bene così
+                        </Button>
+                      </div>
+                    )
+                  }
+                >
                   L'AI non è sicura di questa classificazione
                   {score != null && ` (confidenza ${formatPercent(score)})`}. Controlla i dati e la destinazione
                   prima di archiviare.
                 </Callout>
               )}
 
-              <Section
-                title={currentLocation ? "Posizione nell'archivio" : "Destinazione"}
-                action={
-                  editableDestination &&
-                  suggested &&
-                  !draft.editing && (
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => setDraft((d) => ({ ...d, editing: true }))}
-                    >
-                      <Pencil />
-                      Modifica
-                    </Button>
-                  )
-                }
-              >
+              <Section title={currentLocation ? "Posizione nell'archivio" : "Destinazione"} action={editButton}>
                 {currentLocation && <DestinationBox destination={currentLocation} />}
                 {currentLocation && showSuggestion && suggested && (
                   <>
                     <div className="flex items-center gap-2 pl-3.5 text-xs text-muted-foreground">
                       <ArrowDown className="size-3.5" />
-                      L'ultima analisi suggerisce una posizione diversa
+                      {classification.user_verified
+                        ? "Hai indicato una posizione diversa"
+                        : "L'ultima analisi suggerisce una posizione diversa"}
                     </div>
                     <DestinationBox destination={suggested} extension={extension} muted />
                   </>
                 )}
                 {!currentLocation &&
-                  (draft.editing && draft.value ? (
-                    <div className="space-y-3 rounded-xl border bg-card p-3.5">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="dest-path">Cartella</Label>
-                        <Input
-                          id="dest-path"
-                          value={draft.value.path}
-                          onChange={(e) =>
-                            setDraft((d) => ({ ...d, value: d.value && { ...d.value, path: e.target.value } }))
-                          }
-                          aria-invalid={!draft.value.path.trim()}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Separa le sottocartelle con «/». Quelle mancanti vengono create nell'archivio.
-                        </p>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="dest-name">Nome file</Label>
-                        <Input
-                          id="dest-name"
-                          value={draft.value.filename}
-                          onChange={(e) =>
-                            setDraft((d) => ({ ...d, value: d.value && { ...d.value, filename: e.target.value } }))
-                          }
-                          aria-invalid={!draft.value.filename.trim()}
-                        />
-                        <p className="text-xs text-muted-foreground">L'estensione originale viene mantenuta.</p>
-                      </div>
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDraft({ key: draftKey, value: suggested, editing: false })}
-                        >
-                          Ripristina proposta
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={!destination}
-                          onClick={() => setDraft((d) => ({ ...d, editing: false }))}
-                        >
-                          Fatto
-                        </Button>
-                      </div>
-                    </div>
-                  ) : destination ? (
-                    <>
-                      <DestinationBox destination={destination} extension={extension} />
-                      {edited && (
-                        <p className="pl-1 text-xs text-muted-foreground">
-                          Modificata da te: verrà usata per questa archiviazione.
-                        </p>
-                      )}
-                    </>
+                  (suggested ? (
+                    <DestinationBox destination={suggested} extension={extension} />
                   ) : (
                     <Callout tone="neutral">L'analisi non ha proposto una destinazione.</Callout>
                   ))}
               </Section>
 
-              <ClassificationDetails classification={classification} />
+              <ClassificationDetails classification={classification} documentAction={editButton} />
             </>
           )}
         </div>
 
         <footer className="flex flex-wrap items-center gap-2 border-t bg-muted/40 px-5 py-3">
-          {footer(currentLocation ? suggested : destination)}
+          {editing ? (
+            <>
+              <Button variant="ghost" onClick={() => setEditingFile(null)} disabled={saving}>
+                Annulla
+              </Button>
+              <div className="flex-1" />
+              <Button type="submit" form={FORM_ID} disabled={saving}>
+                {saving ? <Loader2 className="animate-spin" /> : <Check />}
+                Salva modifiche
+              </Button>
+            </>
+          ) : (
+            footer(suggested)
+          )}
         </footer>
       </SheetContent>
     </Sheet>

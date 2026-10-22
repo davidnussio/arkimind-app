@@ -91,6 +91,21 @@ function evictPreviewCache() {
   }
 }
 
+/** Columns stored next to the classification JSON for search and filters. */
+function classificationColumns(classification: ClassificationResult) {
+  const profile = classification.document_profile;
+  const ricorrenza = classification.ricorrenza;
+  return {
+    classificationJson: JSON.stringify(classification),
+    category: profile?.category ?? "Altro",
+    entity: profile?.entity ?? "",
+    documentType: profile?.document_type ?? "",
+    documentDate: profile?.document_date ?? "",
+    isTaxRelevant: profile?.is_tax_relevant ?? false,
+    isRecurring: ricorrenza && typeof ricorrenza === "object" ? ricorrenza.is_recurring : false,
+  };
+}
+
 // --- RPC Handlers ---
 const rpc = BrowserView.defineRPC<ArkimindRPC>({
   maxRequestTime: 120_000,
@@ -290,10 +305,6 @@ const rpc = BrowserView.defineRPC<ArkimindRPC>({
 
         const classification: ClassificationResult = await classifyRes.json();
 
-        // Extract ricorrenza status
-        const ricorrenza = classification.ricorrenza;
-        const isRecurring = ricorrenza && typeof ricorrenza === "object" ? ricorrenza.is_recurring : false;
-
         // Preserve archived status when re-classifying
         const existingDoc = db.getDocumentByFileId(fileId);
         const wasArchived = existingDoc?.status === "archived";
@@ -302,14 +313,7 @@ const rpc = BrowserView.defineRPC<ArkimindRPC>({
           driveFileId: fileId,
           originalName: fileMeta.name,
           mimeType: fileMeta.mimeType,
-          classificationJson: JSON.stringify(classification),
-          category: classification.document_profile?.category ?? "Altro",
-          entity: classification.document_profile?.entity ?? "",
-          documentType: classification.document_profile?.document_type ?? "",
-          documentDate: classification.document_profile?.document_date ?? "",
-          isTaxRelevant:
-            classification.document_profile?.is_tax_relevant ?? false,
-          isRecurring,
+          ...classificationColumns(classification),
           status: wasArchived ? "archived" : "classified",
           inboxFolderId: fileMeta.parents?.[0],
           archivedPath: existingDoc?.archived_path ?? undefined,
@@ -365,6 +369,16 @@ const rpc = BrowserView.defineRPC<ArkimindRPC>({
           archivedFilename,
         );
 
+        return { success: true };
+      },
+
+      updateClassification: ({ fileId, classification }) => {
+        if (!fileId) throw new Error("fileId is required");
+        if (!classification?.document_profile || !classification.filing_strategy) {
+          throw new Error("Invalid classification");
+        }
+        const updated = db.updateClassification(fileId, classificationColumns(classification));
+        if (!updated) throw new Error("Document not found");
         return { success: true };
       },
 

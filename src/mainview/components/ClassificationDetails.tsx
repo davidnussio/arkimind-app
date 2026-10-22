@@ -63,7 +63,14 @@ export function ConfidenceMeter({ score }: { score: number }) {
 }
 
 /** Profile, money, recurrence and AI reasoning of a classification. */
-export function ClassificationDetails({ classification }: { classification: ClassificationResult }) {
+export function ClassificationDetails({
+  classification,
+  documentAction,
+}: {
+  classification: ClassificationResult;
+  /** Shown in the "Documento" section header, e.g. an edit button. */
+  documentAction?: ReactNode;
+}) {
   const profile = classification.document_profile;
   const financial = financialOf(classification);
   const recurrence = recurrenceOf(classification);
@@ -71,7 +78,7 @@ export function ClassificationDetails({ classification }: { classification: Clas
 
   return (
     <>
-      <Section title="Documento">
+      <Section title="Documento" action={documentAction}>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border bg-card p-4">
           <Field label="Categoria">
             {profile?.category ? <CategoryBadge category={profile.category} /> : "—"}

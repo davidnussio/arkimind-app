@@ -291,6 +291,44 @@ export function saveDocument(doc: {
     );
 }
 
+/**
+ * Replaces the stored classification (and the columns derived from it) with a
+ * user-corrected one. Status and archive location are left untouched.
+ */
+export function updateClassification(
+  driveFileId: string,
+  doc: {
+    classificationJson: string;
+    category: string;
+    entity: string;
+    documentType: string;
+    documentDate: string;
+    isTaxRelevant: boolean;
+    isRecurring: boolean;
+  },
+): boolean {
+  return (
+    getDb()
+      .prepare(
+        `UPDATE documents
+         SET classification_json = ?, category = ?, entity = ?, document_type = ?,
+             document_date = ?, is_tax_relevant = ?, is_recurring = ?,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE drive_file_id = ?`,
+      )
+      .run(
+        doc.classificationJson,
+        doc.category,
+        doc.entity,
+        doc.documentType,
+        doc.documentDate,
+        doc.isTaxRelevant ? 1 : 0,
+        doc.isRecurring ? 1 : 0,
+        driveFileId,
+      ).changes > 0
+  );
+}
+
 export function updateDocumentStatus(
   driveFileId: string,
   status: string,

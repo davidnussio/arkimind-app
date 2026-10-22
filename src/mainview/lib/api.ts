@@ -3,6 +3,7 @@
  * No HTTP server, no fetch, no CORS.
  */
 import { electroview } from "./rpc";
+import type { ClassificationResult } from "../../shared/types";
 
 function rpc() {
   if (!electroview.rpc) {
@@ -76,6 +77,8 @@ export const api = {
   classifyFile: (fileId: string) => rpc().classifyFile({ fileId }),
   archiveFile: (fileId: string, targetPath: string, targetFilename: string) =>
     rpc().archiveFile({ fileId, targetPath, targetFilename }),
+  updateClassification: (fileId: string, classification: ClassificationResult) =>
+    rpc().updateClassification({ fileId, classification }),
 
   // --- Documents ---
   getDocuments: (limit = 100) => rpc().getDocuments({ limit }),

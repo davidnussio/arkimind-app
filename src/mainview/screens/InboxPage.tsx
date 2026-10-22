@@ -53,7 +53,7 @@ import {
 } from "@/lib/documents";
 import { errorMessage, formatDate, formatSize, formatTime, plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { EnrichedDriveFile, InboxFolder } from "../../shared/types";
+import type { ClassificationResult, EnrichedDriveFile, InboxFolder } from "../../shared/types";
 
 type Filter = "all" | "new" | "ready" | "review";
 
@@ -116,6 +116,17 @@ export function InboxPage({ inbox, activity, authenticated, signingIn, onSignIn,
       if (selectedId === file.id) setSelectedId(null);
     } catch (e) {
       toast(`Archiviazione di «${file.name}» non riuscita. ${errorMessage(e)}`, "error");
+    }
+  };
+
+  const saveClassification = async (file: EnrichedDriveFile, classification: ClassificationResult) => {
+    try {
+      await inbox.updateClassification(file.id, classification);
+      toast("Classificazione salvata", "success");
+      return true;
+    } catch (e) {
+      toast(`Impossibile salvare le modifiche. ${errorMessage(e)}`, "error");
+      return false;
     }
   };
 
@@ -397,9 +408,9 @@ export function InboxPage({ inbox, activity, authenticated, signingIn, onSignIn,
           meta={[...fileMeta(selectedFile), `in ${selected.folder.name}`]}
           status={selectedFile.classificationStatus}
           classification={selectedFile.classification}
-          editableDestination
           analyzing={selectedOp === "classify"}
           onAnalyze={() => analyze(selectedFile)}
+          onSave={(c) => saveClassification(selectedFile, c)}
           footer={(destination) => (
             <>
               <Button

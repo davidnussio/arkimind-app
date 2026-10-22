@@ -24,6 +24,9 @@ const CATEGORY_DOTS: Record<string, string> = {
   Altro: "bg-zinc-400",
 };
 
+/** Categories the classifier uses, offered when correcting a result. */
+export const CATEGORIES = Object.keys(CATEGORY_DOTS);
+
 export function categoryDot(category?: string | null): string {
   return CATEGORY_DOTS[category ?? ""] ?? CATEGORY_DOTS.Altro;
 }
@@ -62,7 +65,7 @@ export function confidenceOf(c: ClassificationResult | null): number | null {
 }
 
 export function needsReview(c: ClassificationResult | null): boolean {
-  if (!c) return false;
+  if (!c || c.user_verified) return false;
   const score = confidenceOf(c);
   return Boolean(c.ai_analysis?.needs_human_validation) || (score != null && score < REVIEW_THRESHOLD);
 }

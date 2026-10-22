@@ -91,6 +91,7 @@ const KNOWN_ERRORS: Array<[RegExp, string]> = [
   [/RPC not connected/i, "Arkimind non riesce a comunicare con il processo principale. Riavvia l'app."],
   [/credentials\.json not found/i, "File credentials.json non trovato: copialo in ~/.arkimind/credentials.json e riprova."],
   [/Classification API error \((\d+)\)/i, "Il servizio di analisi ha risposto con un errore ($1). Riprova tra poco."],
+  [/Document not found/i, "Il documento non è più nell'archivio di Arkimind: analizzalo di nuovo."],
 ];
 
 export function errorMessage(error: unknown): string {

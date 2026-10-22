@@ -82,6 +82,8 @@ export interface ClassificationResult {
   };
   ai_analysis?: AiAnalysis;
   ricorrenza?: RecurrenceData | false;
+  /** Set when the user corrected or confirmed the result; cleared by a new analysis. */
+  user_verified?: boolean;
 }
 
 // --- Enriched file with classification ---
@@ -185,6 +187,10 @@ export type ArkimindRPC = {
       archiveFile: {
         params: { fileId: string; targetPath: string; targetFilename: string };
         response: { success: boolean; error?: string };
+      };
+      updateClassification: {
+        params: { fileId: string; classification: ClassificationResult };
+        response: { success: boolean };
       };
 
       // Documents

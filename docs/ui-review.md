@@ -145,9 +145,22 @@ Correzioni funzionali fatte insieme al redesign:
 - Gli errori noti del backend (servizio non configurato, cartella archivio mancante, Drive non collegato…) diventano messaggi in italiano con l'azione da fare.
 - Le anteprime di file Google (Docs, Fogli) usano il PDF esportato invece di dire «non disponibile».
 
-Limiti noti, non toccati:
+### Correzioni salvate
 
-- **Le modifiche alla classificazione non vengono salvate nel DB** (già così prima): il
-  pannello permette di correggere solo cartella e nome file, che vengono usati per
-  l'archiviazione. Per salvare anche categoria, ente e date serve una nuova RPC.
-- La ricerca nel DB restituisce al massimo 50 risultati (limite in `src/bun/db.ts`); l'interfaccia lo segnala.
+Prima `ClassificationEditor` modificava solo lo stato React: categoria, ente, date e
+ricorrenza andavano persi al ricaricamento. Ora:
+
+- **Modifica** nel pannello (sezioni Destinazione e Documento, o *Correggi* nell'avviso
+  «Da verificare») apre un modulo con cartella, nome file, categoria, data, ente, tipo,
+  rilevanza fiscale e ricorrenza.
+- Il salvataggio passa dalla nuova RPC `updateClassification`, che riscrive
+  `classification_json` e le colonne derivate (usate da ricerca e filtri) senza toccare
+  stato e posizione d'archivio.
+- Il risultato salvato è marcato `user_verified`: sparisce l'avviso «Da verificare» e
+  compare «Verificato da te». *Va bene così* conferma senza modificare. Una nuova analisi
+  sostituisce la classificazione e toglie il segno.
+- Per un documento già archiviato, una nuova cartella salvata compare come «Hai indicato
+  una posizione diversa» con il pulsante *Sposta nella nuova posizione*.
+
+Limite noto, non toccato: la ricerca nel DB restituisce al massimo 50 risultati (limite in
+`src/bun/db.ts`); l'interfaccia lo segnala.

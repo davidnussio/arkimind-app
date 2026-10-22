@@ -403,6 +403,17 @@ function seedDocuments(): DocumentRecord[] {
 }
 
 let documents: DocumentRecord[] = scenario === "onboarding" || scenario === "empty" ? [] : seedDocuments();
+// As in the real app, every classified inbox file has a DB row.
+for (const list of Object.values(files)) {
+  for (const f of list) {
+    if (!f.classification || documents.length === 0) continue;
+    documents.push({
+      ...record({ name: f.name, status: "classified", c: f.classification, updated: f.modifiedTime!, mime: f.mimeType }),
+      drive_file_id: f.id,
+    });
+  }
+}
+documents.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 
 const folderTree: Record<string, BrowsedFolder[]> = {
   root: [
@@ -591,6 +602,26 @@ export const api: Api = {
       doc.archived_filename = filename;
       doc.updated_at = new Date().toISOString();
     }
+    return { success: true };
+  },
+
+  updateClassification: async (fileId: string, c: ClassificationResult) => {
+    await wait(null, 500);
+    const hit = findFile(fileId);
+    if (hit) hit.file.classification = c;
+    const doc = documents.find((d) => d.drive_file_id === fileId);
+    if (!doc) throw new Error("Document not found");
+    const r = c.ricorrenza;
+    Object.assign(doc, {
+      classification_json: JSON.stringify(c),
+      category: c.document_profile.category,
+      entity: c.document_profile.entity,
+      document_type: c.document_profile.document_type,
+      document_date: c.document_profile.document_date,
+      is_tax_relevant: c.document_profile.is_tax_relevant ? 1 : 0,
+      is_recurring: r && r.is_recurring ? 1 : 0,
+      updated_at: new Date().toISOString(),
+    });
     return { success: true };
   },
 

@@ -55,9 +55,9 @@ import {
   stageOf,
   type Destination,
 } from "@/lib/documents";
-import { formatDate, plural } from "@/lib/format";
+import { errorMessage, formatDate, plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { DocumentRecord } from "../../shared/types";
+import type { ClassificationResult, DocumentRecord } from "../../shared/types";
 
 const PAGE_SIZE = 25;
 /** `getDocuments` returns the most recently updated rows up to this limit. */
@@ -193,6 +193,23 @@ export function ArchivePage({
       await load();
       toast(`Archiviato in ${destination.path}`, "success");
     });
+
+  const saveClassification = async (doc: DocumentRecord, classification: ClassificationResult) => {
+    try {
+      await api.updateClassification(doc.drive_file_id, classification);
+      await load();
+      toast(
+        needsRearchive({ ...doc, classification_json: JSON.stringify(classification) }) && doc.status === "archived"
+          ? "Classificazione salvata. Usa «Sposta nella nuova posizione» per spostare il file."
+          : "Classificazione salvata",
+        "success",
+      );
+      return true;
+    } catch (e) {
+      toast(`Impossibile salvare le modifiche. ${errorMessage(e)}`, "error");
+      return false;
+    }
+  };
 
   const remove = async (deleteFromDrive: boolean) => {
     if (!deleteTarget) return;
@@ -560,9 +577,9 @@ export function ArchivePage({
               ? { path: selected.archived_path, filename: selected.archived_filename ?? "" }
               : null
           }
-          editableDestination={selected.status !== "archived"}
           analyzing={selectedOp === "reanalyze"}
           onAnalyze={() => reanalyze(selected)}
+          onSave={(c) => saveClassification(selected, c)}
           footer={(destination) => {
             const archived = stageOf(selected.status) === "archived";
             const canMove = destination && (!archived || needsRearchive(selected));

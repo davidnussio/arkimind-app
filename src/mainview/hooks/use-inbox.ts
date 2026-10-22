@@ -10,7 +10,7 @@ export interface FolderFiles {
   error: string | null;
 }
 
-export type FileOperation = "classify" | "archive";
+export type FileOperation = "classify" | "archive" | "save";
 
 export interface InboxCounts {
   total: number;
@@ -147,6 +147,16 @@ export function useInbox(driveReady: boolean) {
     [track, removeFile],
   );
 
+  /** Stores a user-corrected classification. Throws on failure. */
+  const updateClassification = useCallback(
+    (fileId: string, classification: ClassificationResult) =>
+      track(fileId, "save", async () => {
+        await api.updateClassification(fileId, classification);
+        updateFile(fileId, (f) => ({ ...f, classification }));
+      }),
+    [track, updateFile],
+  );
+
   const addFolder = useCallback(
     async (driveFolderId: string, name: string) => {
       await api.addInboxFolder(driveFolderId, name);
@@ -182,6 +192,7 @@ export function useInbox(driveReady: boolean) {
     loadFolder,
     classify,
     archive,
+    updateClassification,
     addFolder,
   };
 }
